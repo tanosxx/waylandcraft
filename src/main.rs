@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }).unwrap();
 
     loop {
-        event_loop.dispatch(None, &mut state).unwrap();
+        event_loop.dispatch(Some(Duration::ZERO), &mut state).unwrap();
         state.display_handle.flush_clients().unwrap();
     }
 }
