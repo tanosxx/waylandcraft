@@ -1,5 +1,6 @@
 package dev.evvie.waylandcraft;
 
+import java.util.OptionalInt;
 import java.util.function.Supplier;
 
 import org.joml.Matrix4f;
@@ -14,8 +15,11 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.math.Axis;
 
 import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec2;
@@ -23,26 +27,38 @@ import net.minecraft.world.phys.Vec3;
 
 public class RenderUtils {
 	
-	private static void drawQuad(Camera camera, ResourceLocation res, Supplier<ShaderInstance> shader, Vec3 p1, Vec3 p2, Vec3 p3, Vec3 p4, Vec2 uv1, Vec2 uv2, Vec2 uv3, Vec2 uv4, Vec3 color, float alpha) {
-	    PoseStack matrixStack = new PoseStack();
-	    matrixStack.mulPose(Axis.XP.rotationDegrees(camera.getXRot()));
-	    matrixStack.mulPose(Axis.YP.rotationDegrees(camera.getYRot() + 180.0F));
-	    matrixStack.translate(-camera.getPosition().x, -camera.getPosition().y, -camera.getPosition().z);
-	    
-	    Matrix4f positionMatrix = matrixStack.last().pose();
-	    Tesselator tesselator = Tesselator.getInstance();
-	    BufferBuilder buffer = tesselator.getBuilder();
+	public static Matrix4f cameraTransform(Camera camera) {
+		PoseStack matrixStack = new PoseStack();
+		matrixStack.mulPose(Axis.XP.rotationDegrees(camera.getXRot()));
+		matrixStack.mulPose(Axis.YP.rotationDegrees(camera.getYRot() + 180.0F));
+		matrixStack.translate(-camera.getPosition().x, -camera.getPosition().y, -camera.getPosition().z);
+		
+		return matrixStack.last().pose();
+	}
+	
+	public static void drawQuad(Camera camera, OptionalInt texture, Supplier<ShaderInstance> shader, Vec3 p1, Vec3 p2, Vec3 p3, Vec3 p4, Vec2 uv1, Vec2 uv2, Vec2 uv3, Vec2 uv4, Vec3 color, float alpha) {
+		Tesselator tesselator = Tesselator.getInstance();
+		BufferBuilder buffer = tesselator.getBuilder();
+		Matrix4f positionMatrix = cameraTransform(camera);
 
-	    buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR_TEX);
-	    buffer.vertex(positionMatrix, (float) p1.x, (float) p1.y, (float) p1.z).color((float) color.x, (float) color.y, (float) color.z, alpha).uv(uv1.x, uv1.y).endVertex();
-	    buffer.vertex(positionMatrix, (float) p2.x, (float) p2.y, (float) p2.z).color((float) color.x, (float) color.y, (float) color.z, alpha).uv(uv2.x, uv2.y).endVertex();
-	    buffer.vertex(positionMatrix, (float) p3.x, (float) p3.y, (float) p3.z).color((float) color.x, (float) color.y, (float) color.z, alpha).uv(uv3.x, uv3.y).endVertex();
-	    buffer.vertex(positionMatrix, (float) p4.x, (float) p4.y, (float) p4.z).color((float) color.x, (float) color.y, (float) color.z, alpha).uv(uv4.x, uv4.y).endVertex();
+		buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR_TEX);
+		buffer.vertex(positionMatrix, (float) p1.x, (float) p1.y, (float) p1.z).color((float) color.x, (float) color.y, (float) color.z, alpha).uv(uv1.x, uv1.y).endVertex();
+		buffer.vertex(positionMatrix, (float) p2.x, (float) p2.y, (float) p2.z).color((float) color.x, (float) color.y, (float) color.z, alpha).uv(uv2.x, uv2.y).endVertex();
+		buffer.vertex(positionMatrix, (float) p3.x, (float) p3.y, (float) p3.z).color((float) color.x, (float) color.y, (float) color.z, alpha).uv(uv3.x, uv3.y).endVertex();
+		buffer.vertex(positionMatrix, (float) p4.x, (float) p4.y, (float) p4.z).color((float) color.x, (float) color.y, (float) color.z, alpha).uv(uv4.x, uv4.y).endVertex();
 
-	    RenderSystem.setShader(shader);
-	    if(res != null) RenderSystem.setShaderTexture(0, res);
-	    RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-	    tesselator.end();
+		RenderSystem.setShader(shader);
+		if(texture.isPresent()) {
+			RenderSystem.setShaderTexture(0, texture.getAsInt());
+		}
+		RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+		tesselator.end();
+	}
+	
+	public static void drawQuad(Camera camera, ResourceLocation res, Supplier<ShaderInstance> shader, Vec3 p1, Vec3 p2, Vec3 p3, Vec3 p4, Vec2 uv1, Vec2 uv2, Vec2 uv3, Vec2 uv4, Vec3 color, float alpha) {
+		TextureManager textureManager = Minecraft.getInstance().getTextureManager();
+		AbstractTexture tex = textureManager.getTexture(res);
+		drawQuad(camera, OptionalInt.of(tex.getId()), shader, p1, p2, p3, p4, uv1, uv2, uv3, uv4, color, alpha);
 	}
 	
 	public static void drawTexturedQuad(Camera camera, ResourceLocation res, Vec3 p1, Vec3 p2, Vec3 p3, Vec3 p4, Vec2 uv1, Vec2 uv2, Vec2 uv3, Vec2 uv4) {
@@ -50,7 +66,7 @@ public class RenderUtils {
 	}
 	
 	public static void drawSolidQuad(Camera camera, Vec3 p1, Vec3 p2, Vec3 p3, Vec3 p4, float r, float g, float b) {
-		drawQuad(camera, null, GameRenderer::getPositionColorShader, p1, p2, p3, p4, Vec2.ZERO, Vec2.ZERO, Vec2.ZERO, Vec2.ZERO, new Vec3(r, g, b), 1.0f);
+		drawQuad(camera, OptionalInt.empty(), GameRenderer::getPositionColorShader, p1, p2, p3, p4, Vec2.ZERO, Vec2.ZERO, Vec2.ZERO, Vec2.ZERO, new Vec3(r, g, b), 1.0f);
 	}
 	
 	public static void drawLine(Camera camera, double x1, double y1, double z1, double x2, double y2, double z2, float r, float g, float b) {
@@ -58,22 +74,17 @@ public class RenderUtils {
 	}
 	
 	public static void drawLine(Camera camera, Vec3 p1, Vec3 p2, float r, float g, float b) {
-	    PoseStack matrixStack = new PoseStack();
-	    matrixStack.mulPose(Axis.XP.rotationDegrees(camera.getXRot()));
-	    matrixStack.mulPose(Axis.YP.rotationDegrees(camera.getYRot() + 180.0F));
-	    matrixStack.translate(-camera.getPosition().x, -camera.getPosition().y, -camera.getPosition().z);
-	    
-	    Matrix4f positionMatrix = matrixStack.last().pose();
-	    Tesselator tesselator = Tesselator.getInstance();
-	    BufferBuilder buffer = tesselator.getBuilder();
+		Tesselator tesselator = Tesselator.getInstance();
+		BufferBuilder buffer = tesselator.getBuilder();
+		Matrix4f positionMatrix = cameraTransform(camera);
 
-	    buffer.begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
-	    buffer.vertex(positionMatrix, (float) p1.x, (float) p1.y, (float) p1.z).color(r, g, b, 1f).endVertex();
-	    buffer.vertex(positionMatrix, (float) p2.x, (float) p2.y, (float) p2.z).color(r, g, b, 1f).endVertex();
+		buffer.begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
+		buffer.vertex(positionMatrix, (float) p1.x, (float) p1.y, (float) p1.z).color(r, g, b, 1f).endVertex();
+		buffer.vertex(positionMatrix, (float) p2.x, (float) p2.y, (float) p2.z).color(r, g, b, 1f).endVertex();
 
-	    RenderSystem.setShader(GameRenderer::getPositionColorShader);
-	    RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-	    tesselator.end();
+		RenderSystem.setShader(GameRenderer::getPositionColorShader);
+		RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+		tesselator.end();
 	}
 	
 	public static void drawTracer(Camera camera, Vec3 p, float r, float g, float b) {
@@ -82,8 +93,8 @@ public class RenderUtils {
 		t = t.add(l);
 		
 		RenderSystem.depthFunc(GL11.GL_ALWAYS);
-	    drawLine(camera, p, t, r, g, b);
-	    RenderSystem.depthFunc(GL11.GL_LEQUAL);
+		drawLine(camera, p, t, r, g, b);
+		RenderSystem.depthFunc(GL11.GL_LEQUAL);
 	}
 	
 	public static void drawBlockOutline(Camera camera, BlockPos pos, double d, float r, float g, float b) {
