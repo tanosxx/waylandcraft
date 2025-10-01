@@ -46,8 +46,8 @@ public class WLCSurface {
 		this.nextChild = surface;
 	}
 	
-	protected void setBuffer(WLCBuffer buffer) {
-		this.buffer = buffer;
+	protected void attachShmBuffer(int width, int height, long shmDataPtr) {
+		this.buffer = new WLCBuffer(width, height, shmDataPtr);
 	}
 	
 	protected void setXOff(int xoff) {

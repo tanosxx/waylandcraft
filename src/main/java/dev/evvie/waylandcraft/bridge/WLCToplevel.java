@@ -5,7 +5,7 @@ import org.jetbrains.annotations.Nullable;
 public class WLCToplevel {
 	
 	// Set to zero when this toplevel no longer exists
-	private final long handle;
+	private long handle;
 	
 	@Nullable
 	private WLCSurface surface;
@@ -18,8 +18,18 @@ public class WLCToplevel {
 		return this.handle;
 	}
 	
+	protected long takeHandle() {
+		long old = this.handle;
+		this.handle = 0;
+		return old;
+	}
+	
 	protected void setSurface(WLCSurface surface) {
 		this.surface = surface;
+	}
+	
+	public WLCSurface getSurfaceTree() {
+		return this.surface;
 	}
 	
 }

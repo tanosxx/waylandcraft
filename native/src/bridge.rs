@@ -1,9 +1,39 @@
+use std::ops::DerefMut;
 use crate::{WaylandCraft, wlc_init};
+use smithay::{
+    wayland::{
+        shell::xdg::ToplevelSurface,
+        compositor::{
+            SurfaceData, SurfaceAttributes, BufferAssignment, with_states
+        },
+        shm::with_buffer_contents,
+    },
+    reexports::{
+        wayland_server::{
+            protocol::{
+                wl_surface::WlSurface,
+            },
+        },
+    },
+};
 use jni::{
-    objects::JClass,
-    sys::{jlong, jstring},
+    objects::{JClass, JObject},
+    sys::{jlong, jstring, jarray, jsize, jobject, jint, jvalue},
+    signature::{ReturnType, Primitive},
     JNIEnv,
 };
+
+pub(crate) struct BridgeState {
+    toplevels: Vec<ToplevelSurface>,
+}
+
+impl BridgeState {
+    pub fn new() -> Self {
+        BridgeState {
+            toplevels: vec![],
+        }
+    }
+}
 
 fn jptr_to_instance(ptr: jlong) -> &'static mut WaylandCraft<'static> {
     let ptr: *mut WaylandCraft = (ptr as usize) as *mut WaylandCraft;
@@ -54,4 +84,103 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_socket<'l>(
     let instance = jptr_to_instance(ptr);
     let socket = instance.state.socket.to_str().unwrap();
     env.new_string(socket).unwrap().into_raw()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_toplevels<'l>(
+    env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    ptr: jlong
+) -> jarray {
+    let instance = jptr_to_instance(ptr);
+
+    for toplevel in instance.state.xdg_state.toplevel_surfaces() {
+        if !instance.bridge.toplevels.contains(toplevel) {
+            instance.bridge.toplevels.push(toplevel.clone());
+        }
+    }
+
+    let toplevels: Vec<jlong> = instance.bridge.toplevels
+        .iter_mut()
+        .filter(|t| t.alive())
+        .map(|r| r as *mut ToplevelSurface)
+        .map(|ptr| (ptr as usize) as jlong)
+        .collect();
+
+    let array = env.new_long_array(toplevels.len() as jsize).unwrap();
+    env.set_long_array_region(&array, 0, &toplevels).unwrap();
+    array.into_raw()
+}
+
+fn create_surface<'l>(
+    env: &mut JNIEnv<'l>,
+    surf: &WlSurface,
+    data: &SurfaceData
+) -> JObject<'l> {
+    let class_name = "dev/evvie/waylandcraft/bridge/WLCSurface";
+    let ctor = env.get_method_id(class_name, "<init>", "()V").unwrap();
+    let obj = unsafe {
+        env.new_object_unchecked(class_name, ctor, &[]).unwrap()
+    };
+
+    let mut attr_guard = data
+        .cached_state
+        .get::<SurfaceAttributes>();
+    let attr = attr_guard
+        .deref_mut()
+        .current();
+
+    let maybe_buf = if let Some(assign) = &attr.buffer {
+        match assign {
+            BufferAssignment::NewBuffer(b) => Some(b),
+            BufferAssignment::Removed => None,
+        }
+    } else {
+        None
+    };
+    if let Some(buf) = maybe_buf {
+        let _ = with_buffer_contents(buf, |ptr, _len, data| {
+            let width = data.width as jint;
+            let height = data.height as jint;
+            let ptr = (ptr as usize) as jlong;
+            unsafe {
+                env.call_method_unchecked(
+                    &obj,
+                    (class_name, "attachShmBuffer", "(IIJ)V"),
+                    ReturnType::Primitive(Primitive::Void),
+                    &[
+                        jvalue { i: width },
+                        jvalue { i: height },
+                        jvalue { j: ptr }
+                    ]
+                ).unwrap();
+            }
+        });
+        //buf.release();
+    }
+
+    obj
+}
+
+fn jptr_to_toplevel(ptr: jlong) -> &'static mut ToplevelSurface {
+    let ptr: *mut ToplevelSurface = (ptr as usize) as *mut ToplevelSurface;
+    unsafe { &mut *ptr }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_surfaceTree<'l>(
+    mut env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    ptr: jlong,
+    handle: jlong
+) -> jobject {
+    let instance = jptr_to_instance(ptr);
+    let toplevel = jptr_to_toplevel(handle);
+    let surface = toplevel.wl_surface();
+
+    with_states(surface, |data| {
+        create_surface(&mut env, surface, data)
+    }).into_raw()
 }

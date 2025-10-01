@@ -1,5 +1,11 @@
 package dev.evvie.waylandcraft.bridge;
 
+import java.nio.ByteBuffer;
+
+import org.lwjgl.system.MemoryUtil;
+
+import dev.evvie.waylandcraft.BufferTexture;
+
 public class WLCBuffer {
 	
 	public final int width;
@@ -12,6 +18,12 @@ public class WLCBuffer {
 		this.width = width;
 		this.height = height;
 		this.shmDataPtr = shmDataPtr;
+	}
+	
+	public BufferTexture getAsTexture() {
+		ByteBuffer buf = MemoryUtil.memByteBuffer(shmDataPtr, width * height * 4);
+		BufferTexture tex = new BufferTexture(buf, width, height);
+		return tex;
 	}
 	
 }

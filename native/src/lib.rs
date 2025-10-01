@@ -1,3 +1,4 @@
+use crate::bridge::BridgeState;
 use std::sync::Arc;
 use std::ops::DerefMut;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
@@ -23,7 +24,7 @@ use smithay::{
         socket::ListeningSocketSource,
         compositor::{
             CompositorState, CompositorClientState, CompositorHandler,
-            with_states, SurfaceAttributes, BufferAssignment,
+            SurfaceAttributes,
             with_surface_tree_downward, TraversalAction
         },
         buffer::BufferHandler,
@@ -50,6 +51,7 @@ mod bridge;
 pub(crate) struct WaylandCraft<'a> {
     pub state: WLCState,
     pub event_loop: EventLoop<'a, WLCState>,
+    pub bridge: BridgeState,
 }
 
 pub(crate) struct WLCState {
@@ -101,27 +103,7 @@ impl CompositorHandler for WLCState {
         &client.get_data::<WLCClient>().unwrap().compositor_state
     }
 
-    fn commit(&mut self, surface: &WlSurface) {
-        with_states(surface, |data| {
-            let mut attr_guard = data
-                .cached_state
-                .get::<SurfaceAttributes>();
-            let attr = attr_guard
-                .deref_mut()
-                .current();
-            let maybe_buf = if let Some(assign) = &attr.buffer {
-                match assign {
-                    BufferAssignment::NewBuffer(b) => Some(b),
-                    BufferAssignment::Removed => None,
-                }
-            } else {
-                None
-            };
-            if let Some(buf) = maybe_buf {
-                buf.release();
-            }
-            attr.buffer = None;
-        });
+    fn commit(&mut self, _surface: &WlSurface) {
     }
 }
 
@@ -273,7 +255,12 @@ pub(crate) fn wlc_init(
         Ok(calloop::PostAction::Continue)
     }).unwrap();
 
-    Ok(WaylandCraft { state, event_loop })
+    let instance = WaylandCraft {
+        state,
+        event_loop,
+        bridge: BridgeState::new(),
+    };
+    Ok(instance)
 }
 
 impl<'a> WaylandCraft<'a> {

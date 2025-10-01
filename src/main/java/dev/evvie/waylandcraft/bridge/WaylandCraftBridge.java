@@ -1,8 +1,13 @@
 package dev.evvie.waylandcraft.bridge;
 
+import java.util.ArrayList;
+
+import org.apache.commons.lang3.ArrayUtils;
+
 public class WaylandCraftBridge {
 	
 	private long instance;
+	private ArrayList<WLCToplevel> toplevels = new ArrayList<WLCToplevel>();
 	
 	static {
 		System.loadLibrary("waylandcraft");
@@ -17,8 +22,34 @@ public class WaylandCraftBridge {
 		return new WaylandCraftBridge(handle);
 	}
 	
+	private WLCToplevel getOrCreate(long handle) {
+		for(WLCToplevel toplevel : toplevels) {
+			if(toplevel.getHandle() == handle) return toplevel;
+		}
+		WLCToplevel toplevel = new WLCToplevel(handle);
+		toplevels.add(toplevel);
+		return toplevel;
+	}
+	
+	private void deleteNonExisting(long[] remainingHandles) {
+		toplevels.removeIf((toplevel) -> !ArrayUtils.contains(remainingHandles, toplevel.takeHandle()));
+	}
+	
 	public void update() {
 		update(this.instance);
+		
+		long[] toplevels = toplevels(instance);
+		deleteNonExisting(toplevels);
+		
+		for(long handle : toplevels) {
+			WLCToplevel toplevel = getOrCreate(handle);
+			WLCSurface root = surfaceTree(this.instance, handle);
+			toplevel.setSurface(root);
+		}
+	}
+	
+	public WLCToplevel[] getToplevels() {
+		return toplevels.toArray(new WLCToplevel[toplevels.size()]);
 	}
 	
 	public String getSocket() {
@@ -29,6 +60,7 @@ public class WaylandCraftBridge {
 	private static native void update(long instance);
 	private static native String socket(long instance);
 	
-	private static native boolean updateToplevel(long instance, long handle);
+	private static native long[] toplevels(long instance);
+	private static native WLCSurface surfaceTree(long instance, long handle);
 	
 }
