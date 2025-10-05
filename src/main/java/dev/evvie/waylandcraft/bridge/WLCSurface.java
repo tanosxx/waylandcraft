@@ -19,6 +19,9 @@ public class WLCSurface {
 	@Nullable
 	protected WLCSurface nextChild = null;
 	
+	@Nullable
+	protected WLCSurface prevChild = null;
+	
 	protected long parentHandle = 0;
 	
 	@Nullable
@@ -57,6 +60,16 @@ public class WLCSurface {
 		this.buffer = new BufferTexture(ptr, width, height);
 	}
 	
+	public int width() {
+		if(buffer == null) return 0;
+		return buffer.width;
+	}
+	
+	public int height() {
+		if(buffer == null) return 0;
+		return buffer.height;
+	}
+	
 	@Nullable
 	public BufferTexture getBuffer() {
 		return this.buffer;
@@ -70,6 +83,11 @@ public class WLCSurface {
 	@Nullable
 	public WLCSurface getNextChild() {
 		return this.nextChild;
+	}
+	
+	@Nullable
+	public WLCSurface getPrevChild() {
+		return this.prevChild;
 	}
 	
 }

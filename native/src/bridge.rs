@@ -1,14 +1,17 @@
 use std::ops::DerefMut;
-use crate::{WaylandCraft, wlc_init};
+use crate::{WaylandCraft, wlc_init, get_time};
 use smithay::{
     wayland::{
         shell::xdg::ToplevelSurface,
         compositor::{
             SurfaceAttributes, BufferAssignment, with_states,
-            with_surface_tree_upward, TraversalAction, SubsurfaceCachedState,
+            with_surface_tree_upward, TraversalAction, SubsurfaceCachedState
         },
         shm::with_buffer_contents,
     },
+    input::pointer::{MotionEvent, ButtonEvent},
+    utils::{Point, Logical, SERIAL_COUNTER},
+    backend::input::ButtonState,
     reexports::{
         wayland_server::{
             protocol::{
@@ -19,7 +22,9 @@ use smithay::{
 };
 use jni::{
     objects::{JClass, JObject, JValue},
-    sys::{jlong, jstring, jarray, jsize, jint, jvalue},
+    sys::{
+        jlong, jstring, jarray, jsize, jint, jvalue, jdouble, jboolean, jobject
+    },
     signature::{ReturnType, Primitive},
     JNIEnv,
 };
@@ -270,7 +275,7 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_updateSurfaceTree<'l>(
     mut env: JNIEnv<'l>,
     bridge_obj: JObject<'l>,
     root: JObject<'l>
-) {
+) -> jobject {
     let instance_ptr: jlong = env.get_field_unchecked(
         &bridge_obj,
         (WaylandCraftBridge_class, "instance", "J"),
@@ -340,6 +345,17 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_updateSurfaceTree<'l>(
                 JValue::Object(&JObject::null())
             ).unwrap();
 
+            // Set this surfaces prevChild to the last child
+            env.set_field_unchecked(
+                &obj,
+                (
+                    WLCSurface_class,
+                    "prevChild",
+                    "Ldev/evvie/waylandcraft/bridge/WLCSurface;"
+                ),
+                JValue::Object(&last_child)
+            ).unwrap();
+
             // Mark this surface as visited
             env.set_field_unchecked(
                 &obj,
@@ -375,6 +391,95 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_updateSurfaceTree<'l>(
         },
         |_surface, _data, _parent| true
     );
+
+    last_child.into_raw()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_surfaceMotion<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    ptr: jlong,
+    handle: jlong,
+    x: jdouble,
+    y: jdouble
+) {
+    let instance = jptr_to_instance(ptr);
+    let surface: Option<&mut WlSurface> = if handle != 0 {
+        Some(jptr_to_wlsurface(handle))
+    } else { None };
+
+    let pos: Point<f64, Logical> = Point::new(x, y);
+    let focus: Option<(WlSurface, Point<f64, Logical>)> =
+        surface.map(|s| (s.clone(), Point::new(0.0, 0.0)));
+
+    let pointer = instance.state.seat.get_pointer().unwrap();
+    pointer.motion(
+        &mut instance.state,
+        focus,
+        &MotionEvent {
+            location: pos,
+            serial: SERIAL_COUNTER.next_serial(),
+            time: get_time(),
+        }
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_pointerButton<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    ptr: jlong,
+    button: jint,
+    state: jint
+) {
+    let instance = jptr_to_instance(ptr);
+
+    let state = match state {
+        0 => ButtonState::Released,
+        1 => ButtonState::Pressed,
+        _ => {return;}
+    };
+
+    let pointer = instance.state.seat.get_pointer().unwrap();
+    pointer.button(
+        &mut instance.state,
+        &ButtonEvent {
+            serial: SERIAL_COUNTER.next_serial(),
+            time: get_time(),
+            button: button as u32,
+            state
+        }
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_checkInputRegion<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    handle: jlong,
+    x: jdouble,
+    y: jdouble
+) -> jboolean {
+    let surface = jptr_to_wlsurface(handle);
+    let point: Point<f64, Logical> = Point::new(x, y);
+
+    with_states(surface, |data| {
+        let mut attr_guard = data
+            .cached_state
+            .get::<SurfaceAttributes>();
+        let attr = attr_guard
+            .deref_mut()
+            .current();
+        if let Some(r) = &attr.input_region {
+            r.contains(point.to_i32_floor())
+        } else {
+            true
+        }
+    }) as jboolean
 }
 
 #[unsafe(no_mangle)]

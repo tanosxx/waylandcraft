@@ -37,9 +37,8 @@ use smithay::{
     },
     output::{self, Output, PhysicalProperties, Subpixel},
     input::{
-        pointer::PointerHandle,
-        keyboard::{KeyboardHandle, XkbConfig},
-        SeatState, SeatHandler
+        keyboard::XkbConfig,
+        SeatState, SeatHandler, Seat
     },
     utils::Serial,
     delegate_compositor, delegate_shm, delegate_output, delegate_seat,
@@ -61,8 +60,7 @@ pub(crate) struct WLCState {
     pub shm_state: ShmState,
     pub seat_state: SeatState<Self>,
     pub xdg_state: XdgShellState,
-    pub pointer: PointerHandle<Self>,
-    pub keyboard: KeyboardHandle<Self>,
+    pub seat: Seat<Self>,
 }
 
 impl WLCState {
@@ -72,8 +70,8 @@ impl WLCState {
 
         let mut seat_state = SeatState::<WLCState>::new();
         let mut seat = seat_state.new_wl_seat(&disp, "seat-0");
-        let pointer = seat.add_pointer();
-        let keyboard = seat.add_keyboard(XkbConfig::default(), 200, 25)
+        seat.add_pointer();
+        seat.add_keyboard(XkbConfig::default(), 200, 25)
             .expect("Keyboard create");
 
         let xdg_state = XdgShellState::new::<WLCState>(&disp);
@@ -85,8 +83,7 @@ impl WLCState {
             shm_state,
             seat_state,
             xdg_state,
-            pointer,
-            keyboard,
+            seat,
         }
     }
 }
@@ -179,12 +176,16 @@ impl ClientData for WLCClient {
     }
 }
 
-fn send_frame(state: &mut WLCState) {
-    let toplevels = state.xdg_state.toplevel_surfaces();
+pub fn get_time() -> u32 {
     let time: u128 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis();
+    time as u32
+}
+
+fn send_frame(state: &mut WLCState) {
+    let toplevels = state.xdg_state.toplevel_surfaces();
     for toplevel in toplevels {
         let toplevel_surface = toplevel.wl_surface();
 
@@ -200,7 +201,7 @@ fn send_frame(state: &mut WLCState) {
                     .deref_mut()
                     .current();
                 for c in attr.frame_callbacks.drain(..) {
-                    c.done(time as u32);
+                    c.done(get_time());
                 }
             },
             |_, _, _| true,

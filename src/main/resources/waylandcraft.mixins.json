@@ -3,7 +3,8 @@
 	"package": "dev.evvie.waylandcraft.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"GameRendererMixin"
+		"GameRendererMixin",
+		"MouseHandlerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

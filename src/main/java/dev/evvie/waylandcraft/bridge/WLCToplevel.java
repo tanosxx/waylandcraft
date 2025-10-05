@@ -8,7 +8,10 @@ public class WLCToplevel {
 	private long handle;
 	
 	@Nullable
-	private WLCSurface surface;
+	protected WLCSurface surface;
+	
+	@Nullable
+	protected WLCSurface lastChild;
 	
 	public WLCToplevel(long handle) {
 		this.handle = handle;
@@ -28,12 +31,12 @@ public class WLCToplevel {
 		return handle != 0;
 	}
 	
-	protected void setSurface(WLCSurface surface) {
-		this.surface = surface;
-	}
-	
 	public WLCSurface getSurfaceTree() {
 		return this.surface;
+	}
+	
+	public WLCSurface getSurfaceTreeLast() {
+		return this.lastChild;
 	}
 	
 }

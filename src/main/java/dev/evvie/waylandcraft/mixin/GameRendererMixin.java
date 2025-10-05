@@ -37,7 +37,7 @@ public class GameRendererMixin {
 			WindowHitResult h = window.intersect(pos, dir);
 			if(h == null) continue;
 			
-			if(windowHit == null || h.dist < windowHit.dist) {
+			if(windowHit == null || h.position.distanceToSqr(pos) < windowHit.position.distanceToSqr(pos)) {
 				windowHit = h;
 			}
 		}

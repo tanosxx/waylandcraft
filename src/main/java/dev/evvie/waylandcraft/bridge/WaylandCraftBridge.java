@@ -31,7 +31,7 @@ public class WaylandCraftBridge {
 		
 		long surfaceHandle = toplevelSurface(this.instance, handle);
 		WLCSurface surface = getOrCreateSurface(surfaceHandle);
-		toplevel.setSurface(surface);
+		toplevel.surface = surface;
 		
 		toplevels.add(toplevel);
 		return toplevel;
@@ -90,7 +90,7 @@ public class WaylandCraftBridge {
 		for(long handle : toplevel_handles) {
 			WLCToplevel toplevel = getOrCreateToplevel(handle);
 			WLCSurface root = toplevel.getSurfaceTree();
-			updateSurfaceTree(root);
+			toplevel.lastChild = updateSurfaceTree(root);
 		}
 		
 		// All surface trees have now been walked. Now delete all unvisited surfaces
@@ -136,6 +136,23 @@ public class WaylandCraftBridge {
 		return socket(this.instance);
 	}
 	
+	public boolean inputRegionContains(WLCSurface surface, double x, double y) {
+		return checkInputRegion(surface.getHandle(), x, y);
+	}
+	
+	public void sendMotion(WLCSurface surface, double x, double y) {
+		surfaceMotion(instance, surface.getHandle(), x, y);
+	}
+	
+	public void sendMotionOutside() {
+		long handle = 0;
+		surfaceMotion(instance, handle, 0.0, 0.0);
+	}
+	
+	public void sendButton(int button, int state) {
+		pointerButton(instance, button, state);
+	}
+	
 	private static native long init();
 	private static native void update(long instance);
 	private static native String socket(long instance);
@@ -144,7 +161,19 @@ public class WaylandCraftBridge {
 	private static native long toplevelSurface(long instance, long handle);
 	private static native void updateSurfaceData(WLCSurface surface);
 	
-	private native void updateSurfaceTree(WLCSurface root);
+	// Updates the surface tree given by the root surface
+	// This changes the doubly linked list of the WLCSurfaces.
+	// The returned surface is the last (most deeply nested) child
+	private native WLCSurface updateSurfaceTree(WLCSurface root);
+	
+	// Check if point in surface input region
+	private static native boolean checkInputRegion(long surfaceHandle, double x, double y);
+	
+	// Create pointer motion event, handle can be 0 when under no surface
+	private static native void surfaceMotion(long instance, long handle, double x, double y);
+	
+	// Create pointer button event. `button` has to be the linux button code, state is 1 for pressed, 0 for released
+	private static native void pointerButton(long instance, int button, int state);
 	
 	private static native void freeSurface(long instance, long handle);
 	private static native void freeToplevel(long instance, long handle);

@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import com.mojang.blaze3d.systems.RenderSystem;
 
 import dev.evvie.waylandcraft.Window.WindowHitResult;
+import dev.evvie.waylandcraft.bridge.WLCSurface;
 import dev.evvie.waylandcraft.bridge.WLCToplevel;
 import dev.evvie.waylandcraft.bridge.WaylandCraftBridge;
 import net.fabricmc.api.ClientModInitializer;
@@ -24,7 +25,7 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 	
 	public static WaylandCraft instance;
 	
-	private WaylandCraftBridge bridge = null;
+	public WaylandCraftBridge bridge = null;
 	public ArrayList<Window> windows = new ArrayList<Window>();
 	public WindowHitResult hitResult = null;
 	
@@ -55,19 +56,57 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 			
 			RenderSystem.enableDepthTest();
 			windows.forEach((w) -> w.render(context));
+			
+			sendMotionEvents();
 		});
 		
 		WorldRenderEvents.END.register(context -> {
-			Camera camera = context.camera();
-			if(hitResult != null) {
-				Vec3 coords = hitResult.surfaceLocal;
-				Window w = hitResult.target;
-				
-				LOGGER.info(coords.x + ", " + coords.y + " (" + hitResult.dist + ")");
-				
-				Vec3 hitPos = hitResult.target.origin().add(w.localX().scale(coords.x)).add(w.localY().scale(coords.y));
-				RenderUtils.drawMarker(camera, hitPos, 0.2, 1.0f, 0.0f, 1.0f);
+			if(hitResult == null) return;
+			
+			Vec3 coords = hitResult.surfaceLocal;
+			Window w = hitResult.target;
+			
+			if(!w.isAlive()) {
+				hitResult = null;
+				return;
 			}
+			
+			Camera camera = context.camera();
+			Vec3 hitPos = hitResult.target.origin().add(w.localX().scale(coords.x)).add(w.localY().scale(coords.y));
+			RenderUtils.drawMarker(camera, hitPos, 0.2, 1.0f, 0.0f, 1.0f);
 		});
+	}
+	
+	private void sendMotionEvents() {
+		if(hitResult != null) {
+			Vec3 coords = hitResult.surfaceLocal;
+			Window w = hitResult.target;
+			
+			if(!w.isAlive()) {
+				hitResult = null;
+				bridge.sendMotionOutside();
+				return;
+			}
+			
+			LOGGER.info(coords.x + ", " + coords.y + " (" + hitResult.dist + ")");
+			
+			for(WLCSurface surface = w.toplevel.getSurfaceTreeLast(); surface != null; surface = surface.getPrevChild()) {
+				Vec3 rel = coords.subtract(surface.xSubpos, surface.ySubpos, 0);
+				
+				int width = surface.width();
+				int height = surface.height();
+				
+				if(rel.x < 0 || rel.y < 0 || rel.x > width || rel.y > height) {
+					continue;
+				}
+				
+				if(bridge.inputRegionContains(surface, rel.x, rel.y)) {
+					bridge.sendMotion(surface, rel.x, rel.y);
+					return;
+				}
+			}
+		}
+		
+		bridge.sendMotionOutside();
 	}
 }

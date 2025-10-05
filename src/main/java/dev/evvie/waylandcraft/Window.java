@@ -1,7 +1,5 @@
 package dev.evvie.waylandcraft;
 
-import java.util.Random;
-
 import org.joml.Matrix3d;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
@@ -82,8 +80,8 @@ public class Window {
 		}
 	}
 	
-	private long last = System.currentTimeMillis();
-	private Random rand = new Random();
+//	private long last = System.currentTimeMillis();
+//	private Random rand = new Random();
 	
 	public void render(WorldRenderContext ctx) {
 		updateGeometry();
@@ -91,11 +89,11 @@ public class Window {
 //		normal = new Vec3(ctx.camera().getLookVector()).reverse();
 //		down = new Vec3(ctx.camera().getUpVector()).reverse();
 		
-		if(System.currentTimeMillis() - last > 10000) {
-			normal = Vec3.directionFromRotation(rand.nextFloat(-180, 180), rand.nextFloat(-180, 180));
-			down = new Vec3(rand.nextDouble(), rand.nextDouble(), rand.nextDouble()).cross(normal).normalize();
-			last = System.currentTimeMillis();
-		}
+//		if(System.currentTimeMillis() - last > 10000) {
+//			normal = Vec3.directionFromRotation(rand.nextFloat(-180, 180), rand.nextFloat(-180, 180));
+//			down = new Vec3(rand.nextDouble(), rand.nextDouble(), rand.nextDouble()).cross(normal).normalize();
+//			last = System.currentTimeMillis();
+//		}
 		
 		int depth = 0;
 		for(WLCSurface surface = toplevel.getSurfaceTree(); surface != null; surface = surface.getNextChild()) {
