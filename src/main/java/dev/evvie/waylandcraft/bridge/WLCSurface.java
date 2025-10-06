@@ -27,6 +27,13 @@ public class WLCSurface {
 	@Nullable
 	protected WLCSurface parent = null;
 	
+	// Surface size. By default the size of the attached buffer.
+	private int width = 0;
+	private int height = 0;
+	
+	@Nullable
+	private ViewportSource sourceView = null;
+	
 	// X and Y offsets relative to parent coords
 	protected int xoff = 0;
 	protected int yoff = 0;
@@ -53,21 +60,42 @@ public class WLCSurface {
 		return handle != 0;
 	}
 	
+	// Attach a shared memory buffer
+	// The surface width and height are reset to the given buffer dimensions.
 	protected void attachShmBuffer(long ptr, int width, int height) {
 		if(this.buffer != null) {
 			this.buffer.release();
 		}
 		this.buffer = new BufferTexture(ptr, width, height);
+		this.width = width;
+		this.height = height;
+	}
+	
+	// Set viewport source dimensions
+	// Crops the surface to the specified rectangle.
+	protected void setViewportSrc(double x, double y, double width, double height) {
+		this.sourceView = new ViewportSource(x, y, width, height);
+		this.width = (int) width;
+		this.height = (int) height;
+	}
+	
+	// Set viewport destination dimensions
+	// Overrides this surfaces width & height values.
+	protected void setViewportDst(int width, int height) {
+		this.width = width;
+		this.height = height;
 	}
 	
 	public int width() {
-		if(buffer == null) return 0;
-		return buffer.width;
+		return width;
 	}
 	
 	public int height() {
-		if(buffer == null) return 0;
-		return buffer.height;
+		return height;
+	}
+	
+	public ViewportSource getViewportSource() {
+		return sourceView;
 	}
 	
 	@Nullable
@@ -88,6 +116,23 @@ public class WLCSurface {
 	@Nullable
 	public WLCSurface getPrevChild() {
 		return this.prevChild;
+	}
+	
+	// Surface-local dimensions of the source rectangle in a buffer
+	public static final class ViewportSource {
+		
+		public final double x;
+		public final double y;
+		public final double width;
+		public final double height;
+		
+		public ViewportSource(double x, double y, double width, double height) {
+			this.x = x;
+			this.y = y;
+			this.width = width;
+			this.height = height;
+		}
+		
 	}
 	
 }

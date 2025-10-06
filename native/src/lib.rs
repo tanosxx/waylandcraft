@@ -41,6 +41,9 @@ use smithay::{
             },
             SelectionHandler,
         },
+        viewporter::{
+            ViewporterState,
+        },
     },
     output::{self, Output, PhysicalProperties, Subpixel},
     input::{
@@ -49,7 +52,7 @@ use smithay::{
     },
     utils::Serial,
     delegate_compositor, delegate_shm, delegate_output, delegate_seat,
-    delegate_xdg_shell, delegate_data_device,
+    delegate_xdg_shell, delegate_data_device, delegate_viewporter,
 };
 
 mod bridge;
@@ -60,7 +63,7 @@ pub(crate) struct WaylandCraft<'a> {
     pub bridge: BridgeState,
 }
 
-pub(crate) struct WLCState {
+pub struct WLCState {
     pub display_handle: DisplayHandle,
     pub socket: OsString,
     pub compositor_state: CompositorState,
@@ -68,6 +71,7 @@ pub(crate) struct WLCState {
     pub seat_state: SeatState<Self>,
     pub xdg_state: XdgShellState,
     pub data_device_state: DataDeviceState,
+    pub viewporter_state: ViewporterState,
     pub seat: Seat<Self>,
 }
 
@@ -83,8 +87,8 @@ impl WLCState {
             .expect("Keyboard create");
 
         let xdg_state = XdgShellState::new::<WLCState>(&disp);
-
         let data_device_state = DataDeviceState::new::<WLCState>(&disp);
+        let viewporter_state = ViewporterState::new::<WLCState>(&disp);
 
         Self {
             display_handle: disp.clone(),
@@ -94,6 +98,7 @@ impl WLCState {
             seat_state,
             xdg_state,
             data_device_state,
+            viewporter_state,
             seat,
         }
     }
@@ -304,3 +309,4 @@ delegate_output!(WLCState);
 delegate_seat!(WLCState);
 delegate_xdg_shell!(WLCState);
 delegate_data_device!(WLCState);
+delegate_viewporter!(WLCState);

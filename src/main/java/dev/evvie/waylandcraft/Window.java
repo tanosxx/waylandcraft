@@ -12,6 +12,7 @@ import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 
 import dev.evvie.waylandcraft.bridge.WLCSurface;
+import dev.evvie.waylandcraft.bridge.WLCSurface.ViewportSource;
 import dev.evvie.waylandcraft.bridge.WLCToplevel;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.Camera;
@@ -69,15 +70,9 @@ public class Window {
 	}
 	
 	private void updateGeometry() {
-		BufferTexture buf = toplevel.getSurfaceTree().getBuffer();
-		if(buf == null) {
-			width = 0;
-			height = 0;
-		}
-		else {
-			width = buf.width;
-			height = buf.height;
-		}
+		WLCSurface root = toplevel.getSurfaceTree();
+		width = root.width();
+		height = root.height();
 	}
 	
 //	private long last = System.currentTimeMillis();
@@ -113,9 +108,22 @@ public class Window {
 		if(buf == null) return;
 		
 		Vec3 tl = origin;
-		Vec3 bl = origin.add(localY.scale(buf.height));
-		Vec3 br = bl.add(localX.scale(buf.width));
-		Vec3 tr = tl.add(localX.scale(buf.width));
+		Vec3 bl = origin.add(localY.scale(surface.height()));
+		Vec3 br = bl.add(localX.scale(surface.width()));
+		Vec3 tr = tl.add(localX.scale(surface.width()));
+		
+		float crop_x1 = 0.0f;
+		float crop_y1 = 0.0f;
+		float crop_x2 = 1.0f;
+		float crop_y2 = 1.0f;
+		
+		ViewportSource src = surface.getViewportSource();
+		if(src != null) {
+			crop_x1 = (float) (src.x / buf.width());
+			crop_y1 = (float) (src.y / buf.height());
+			crop_x2 = (float) ((src.x + src.width) / buf.width());
+			crop_y2 = (float) ((src.y + src.height) / buf.height());
+		}
 		
 		Camera camera = ctx.camera();
 		PoseStack matrixStack = new PoseStack();
@@ -127,10 +135,10 @@ public class Window {
 		/* Surface contents */
 		BufferBuilder buffer = tesselator.getBuilder();
 		buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR_TEX);
-		buffer.vertex(mat, (float) tl.x, (float) tl.y, (float) tl.z).color(1.0f, 1.0f, 1.0f, 1.0f).uv(0, 0).endVertex();
-		buffer.vertex(mat, (float) bl.x, (float) bl.y, (float) bl.z).color(1.0f, 1.0f, 1.0f, 1.0f).uv(0, 1).endVertex();
-		buffer.vertex(mat, (float) br.x, (float) br.y, (float) br.z).color(1.0f, 1.0f, 1.0f, 1.0f).uv(1, 1).endVertex();
-		buffer.vertex(mat, (float) tr.x, (float) tr.y, (float) tr.z).color(1.0f, 1.0f, 1.0f, 1.0f).uv(1, 0).endVertex();
+		buffer.vertex(mat, (float) tl.x, (float) tl.y, (float) tl.z).color(1.0f, 1.0f, 1.0f, 1.0f).uv(crop_x1, crop_y1).endVertex();
+		buffer.vertex(mat, (float) bl.x, (float) bl.y, (float) bl.z).color(1.0f, 1.0f, 1.0f, 1.0f).uv(crop_x1, crop_y2).endVertex();
+		buffer.vertex(mat, (float) br.x, (float) br.y, (float) br.z).color(1.0f, 1.0f, 1.0f, 1.0f).uv(crop_x2, crop_y2).endVertex();
+		buffer.vertex(mat, (float) tr.x, (float) tr.y, (float) tr.z).color(1.0f, 1.0f, 1.0f, 1.0f).uv(crop_x2, crop_y1).endVertex();
 		
 		RenderSystem.setShader(GameRenderer::getPositionColorTexShader);
 		RenderSystem.setShaderTexture(0, buf.getId());
@@ -155,13 +163,10 @@ public class Window {
 		WLCSurface surface;
 		
 		for(surface = toplevel.getSurfaceTree(); surface != null; surface = surface.getNextChild()) {
-			BufferTexture buf = surface.getBuffer();
-			if(buf == null) continue;
-			
 			int minX = surface.xSubpos;
 			int minY = surface.ySubpos;
-			int maxX = minX + buf.width;
-			int maxY = minY + buf.height;
+			int maxX = minX + surface.width();
+			int maxY = minY + surface.height();
 			
 			if(minX < bounds.minX) bounds.minX = minX;
 			if(minY < bounds.minY) bounds.minY = minY;

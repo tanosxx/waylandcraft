@@ -8,9 +8,10 @@ use smithay::{
             with_surface_tree_upward, TraversalAction, SubsurfaceCachedState
         },
         shm::with_buffer_contents,
+        viewporter::{ViewportCachedState, ensure_viewport_valid},
     },
     input::pointer::{MotionEvent, ButtonEvent},
-    utils::{Point, Logical, SERIAL_COUNTER},
+    utils::{Point, Logical, SERIAL_COUNTER, Size},
     backend::input::ButtonState,
     reexports::{
         wayland_server::{
@@ -207,6 +208,8 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_updateSurfaceData<'l>(
             let _ = with_buffer_contents(buf, |ptr, _len, metadata| {
                 let width = metadata.width as jint;
                 let height = metadata.height as jint;
+                ensure_viewport_valid(data, Size::new(width, height));
+
                 unsafe {
                     let ptr = ptr.offset(metadata.offset as isize);
                     let jptr = (ptr as usize) as jlong;
@@ -225,6 +228,43 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_updateSurfaceData<'l>(
             });
             buf.release();
             attr.buffer = None;
+        }
+
+        let mut vp_data_guard = data
+            .cached_state
+            .get::<ViewportCachedState>();
+        let vp_data = vp_data_guard
+            .deref_mut()
+            .current();
+
+        if let Some(src) = vp_data.src {
+            unsafe {
+                env.call_method_unchecked(
+                    &obj,
+                    (WLCSurface_class, "setViewportSrc", "(DDDD)V"),
+                    ReturnType::Primitive(Primitive::Void),
+                    &[
+                        jvalue { d: src.loc.x },
+                        jvalue { d: src.loc.y },
+                        jvalue { d: src.size.w },
+                        jvalue { d: src.size.h },
+                    ]
+                ).unwrap();
+            }
+        }
+
+        if let Some(dst) = vp_data.dst {
+            unsafe {
+                env.call_method_unchecked(
+                    &obj,
+                    (WLCSurface_class, "setViewportDst", "(II)V"),
+                    ReturnType::Primitive(Primitive::Void),
+                    &[
+                        jvalue { i: dst.w },
+                        jvalue { i: dst.h },
+                    ]
+                ).unwrap();
+            }
         }
     });
 }
