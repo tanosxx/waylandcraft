@@ -42,10 +42,19 @@ use smithay::{
             },
             SelectionHandler,
         },
-        viewporter::{
-            ViewporterState,
+        viewporter::ViewporterState,
+        dmabuf::{
+            DmabufState, DmabufGlobal, DmabufFeedbackBuilder, DmabufHandler,
+            ImportNotifier
         },
         single_pixel_buffer::SinglePixelBufferState,
+    },
+    backend::{
+        allocator::{
+            dmabuf::Dmabuf,
+            Format, Fourcc, Modifier
+        },
+        drm::DrmNode,
     },
     output::{self, Output, PhysicalProperties, Subpixel},
     input::{
@@ -55,7 +64,7 @@ use smithay::{
     utils::Serial,
     delegate_compositor, delegate_shm, delegate_output, delegate_seat,
     delegate_xdg_shell, delegate_data_device, delegate_viewporter,
-    delegate_single_pixel_buffer,
+    delegate_single_pixel_buffer, delegate_dmabuf
 };
 
 mod bridge;
@@ -78,6 +87,8 @@ pub struct WLCState {
     pub data_device_state: DataDeviceState,
     pub viewporter_state: ViewporterState,
     pub single_pixel_buffer_state: SinglePixelBufferState,
+    pub dmabuf_state: DmabufState,
+    pub dmabuf_global: DmabufGlobal,
     pub seat: Seat<Self>,
 }
 
@@ -98,6 +109,9 @@ impl WLCState {
         let single_pixel_buffer_state =
             SinglePixelBufferState::new::<WLCState>(&disp);
 
+        let mut dmabuf_state = DmabufState::new();
+        let dmabuf_global = init_dmabuf(&disp, &mut dmabuf_state, egl);
+
         Self {
             display_handle: disp.clone(),
             socket: OsString::new(),
@@ -108,9 +122,37 @@ impl WLCState {
             data_device_state,
             viewporter_state,
             single_pixel_buffer_state,
+            dmabuf_state,
+            dmabuf_global,
             seat,
         }
     }
+}
+
+fn init_dmabuf(
+    disp: &DisplayHandle,
+    state: &mut DmabufState,
+    egl: &EGLHelper
+) -> DmabufGlobal {
+    let render_node_path = egl.get_render_node();
+    let render_node = DrmNode::from_path(render_node_path).unwrap().dev_id();
+
+    let formats = vec![
+        Format {
+            code: Fourcc::Argb8888,
+            modifier: Modifier::Linear,
+        },
+        Format {
+            code: Fourcc::Xrgb8888,
+            modifier: Modifier::Linear,
+        },
+    ];
+
+    let feedback = DmabufFeedbackBuilder::new(render_node, formats)
+        .build()
+        .unwrap();
+
+    state.create_global_with_default_feedback::<WLCState>(disp, &feedback)
 }
 
 impl CompositorHandler for WLCState {
@@ -137,6 +179,22 @@ impl BufferHandler for WLCState {
 impl ShmHandler for WLCState {
     fn shm_state(&self) -> &ShmState {
         &self.shm_state
+    }
+}
+
+impl DmabufHandler for WLCState {
+    fn dmabuf_state(&mut self) -> &mut DmabufState {
+        &mut self.dmabuf_state
+    }
+
+    fn dmabuf_imported(
+        &mut self,
+        _global: &DmabufGlobal,
+        dmabuf: Dmabuf,
+        notifier: ImportNotifier
+    ) {
+        println!("DMABUF ATTACH: {:?}", dmabuf);
+        let _ = notifier.successful::<WLCState>();
     }
 }
 
@@ -321,3 +379,4 @@ delegate_xdg_shell!(WLCState);
 delegate_data_device!(WLCState);
 delegate_viewporter!(WLCState);
 delegate_single_pixel_buffer!(WLCState);
+delegate_dmabuf!(WLCState);
