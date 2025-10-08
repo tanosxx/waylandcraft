@@ -1,4 +1,5 @@
 use crate::bridge::BridgeState;
+use crate::egl::EGLHelper;
 use std::sync::Arc;
 use std::ops::DerefMut;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
@@ -56,11 +57,13 @@ use smithay::{
 };
 
 mod bridge;
+mod egl;
 
 pub(crate) struct WaylandCraft<'a> {
     pub state: WLCState,
     pub event_loop: EventLoop<'a, WLCState>,
     pub bridge: BridgeState,
+    pub egl: EGLHelper,
 }
 
 pub struct WLCState {
@@ -76,7 +79,7 @@ pub struct WLCState {
 }
 
 impl WLCState {
-    fn new(disp: DisplayHandle) -> Self {
+    fn new(disp: DisplayHandle, egl: &EGLHelper) -> Self {
         let compositor_state = CompositorState::new::<WLCState>(&disp);
         let shm_state = ShmState::new::<WLCState>(&disp, vec![]);
 
@@ -233,12 +236,13 @@ fn register_virtual_output(state: &mut WLCState) {
 }
 
 pub(crate) fn wlc_init(
+    egl: EGLHelper
 ) -> Result<WaylandCraft<'static>, Box<dyn std::error::Error>> {
     let event_loop: EventLoop<WLCState> = EventLoop::try_new()?;
     let display: Display<WLCState> = Display::new()?;
     let socket = ListeningSocketSource::new_auto()?;
 
-    let mut state = WLCState::new(display.handle());
+    let mut state = WLCState::new(display.handle(), &egl);
     state.socket = socket.socket_name().to_os_string();
 
     register_virtual_output(&mut state);
@@ -264,6 +268,7 @@ pub(crate) fn wlc_init(
         state,
         event_loop,
         bridge: BridgeState::new(),
+        egl,
     };
     Ok(instance)
 }

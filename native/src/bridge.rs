@@ -1,5 +1,6 @@
 use std::ops::DerefMut;
 use crate::{WaylandCraft, wlc_init, get_time};
+use crate::egl::*;
 use smithay::{
     wayland::{
         shell::xdg::ToplevelSurface,
@@ -53,9 +54,14 @@ fn jptr_to_instance(ptr: jlong) -> &'static mut WaylandCraft<'static> {
 pub extern "system"
 fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_init<'l>(
     mut env: JNIEnv<'l>,
-    _class: JClass<'l>
+    _class: JClass<'l>,
+    proc_addr: jlong,
+    dpy_ptr: jlong
 ) -> jlong {
-    let instance = match wlc_init() {
+    let dpy: EGLDisplay = (dpy_ptr as usize) as EGLDisplay;
+    let egl = EGLHelper::new(dpy, proc_addr as usize);
+
+    let instance = match wlc_init(egl) {
         Ok(i) => i,
         Err(err) => {
             let _ = env.throw_new(

@@ -3,6 +3,10 @@ package dev.evvie.waylandcraft.bridge;
 import java.util.ArrayList;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWNativeEGL;
+
+import net.minecraft.client.Minecraft;
 
 public class WaylandCraftBridge {
 	
@@ -19,7 +23,14 @@ public class WaylandCraftBridge {
 	}
 	
 	public static WaylandCraftBridge start() {
-		long handle = init();
+		long eglDisplay = GLFWNativeEGL.glfwGetEGLDisplay();
+		long eglConfig = GLFWNativeEGL.glfwGetEGLConfig(Minecraft.getInstance().getWindow().getWindow());
+		
+		if(eglDisplay == 0 || eglConfig == 0) {
+			throw new RuntimeException("Failed to get EGL display or config!");
+		}
+		
+		long handle = init(GLFW.Functions.GetProcAddress, eglDisplay);
 		return new WaylandCraftBridge(handle);
 	}
 	
@@ -156,7 +167,7 @@ public class WaylandCraftBridge {
 		pointerButton(instance, button, state);
 	}
 	
-	private static native long init();
+	private static native long init(long glfwGetProcAddress, long eglDisplay);
 	private static native void update(long instance);
 	private static native String socket(long instance);
 	private static native void sendFrame(long instance);
