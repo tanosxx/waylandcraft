@@ -108,7 +108,7 @@ public abstract class BufferTexture {
 		private final long eglImage;
 		
 		public DmabufTexture(long handle, long eglImage, int width, int height) {
-			super(width, height, BufferTexture.FORMAT_XRGB8888);
+			super(width, height, BufferTexture.FORMAT_ARGB8888);
 			this.handle = handle;
 			this.eglImage = eglImage;
 			init();
