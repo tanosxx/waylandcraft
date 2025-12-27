@@ -201,12 +201,15 @@ public class WindowManagerScreen extends Screen {
 	
 	@Override
 	public boolean keyPressed(int key, int scancode, int modifiers) {
-		if(getFocused() != null && getFocused().keyPressed(key, scancode, modifiers)) return true;
 		if(key == GLFW.GLFW_KEY_ESCAPE) {
 			this.onClose();
 			return true;
 		}
 		
+		// Forward key press to currently focused widget
+		if(getFocused() != null && getFocused().keyPressed(key, scancode, modifiers)) return true;
+		
+		// Forward key press to current window
 		if(focused != null) {
 			wlc.bridge.pressKey(scancode);
 			return true;
