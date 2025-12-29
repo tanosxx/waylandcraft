@@ -3,6 +3,7 @@ package dev.evvie.waylandcraft;
 import java.nio.ByteBuffer;
 
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWNativeEGL;
 import org.lwjgl.opengl.GL33;
 import org.lwjgl.system.JNI;
 
@@ -133,6 +134,10 @@ public abstract class BufferTexture {
 		}
 		
 		public void free() {
+			long eglDestroyImage = GLFW.glfwGetProcAddress("eglDestroyImage");
+			long display = GLFWNativeEGL.glfwGetEGLDisplay();
+			
+			JNI.invokePPI(display, this.eglImage, eglDestroyImage);
 			super.release();
 		}
 		
