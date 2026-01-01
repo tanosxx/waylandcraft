@@ -22,7 +22,9 @@ import dev.evvie.waylandcraft.bridge.WLCSurface;
 import dev.evvie.waylandcraft.bridge.WLCSurface.ViewportSource;
 import dev.evvie.waylandcraft.bridge.WLCToplevel;
 import dev.evvie.waylandcraft.bridge.WaylandCraftBridge;
+import dev.evvie.waylandcraft.mixin.IMouseHandlerMixin;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.MouseHandler;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -131,7 +133,19 @@ public class WindowManagerScreen extends Screen {
 	private void exitResizeMode() {
 		if(resizeToplevel != null && resizeToplevel.isAlive()) wlc.bridge.resizeToplevel(resizeToplevel, resizeWidth, resizeHeight);
 		
-		GLFW.glfwSetInputMode(Minecraft.getInstance().getWindow().getWindow(), GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_NORMAL);
+		long window = Minecraft.getInstance().getWindow().getWindow();
+		GLFW.glfwSetInputMode(window, GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_NORMAL);
+		
+		/* <HACK> */
+		/* The following code makes the game remember at what position the cursor is after it was moved in disabled mode during resize */
+		double mouseX[] = new double[1];
+		double mouseY[] = new double[1];
+		GLFW.glfwGetCursorPos(window, mouseX, mouseY);
+		
+		MouseHandler mouseHandler = Minecraft.getInstance().mouseHandler;
+		mouseHandler.setIgnoreFirstMove(); // don't accumulate any movement in accumulatedDX,DY
+		((IMouseHandlerMixin) mouseHandler).invokeOnMove(window, mouseX[0], mouseY[0]);
+		/* </HACK> */
 		
 		resizeMode = false;
 		resizeToplevel = null;
