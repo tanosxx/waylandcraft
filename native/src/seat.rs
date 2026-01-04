@@ -231,7 +231,7 @@ impl WLCSeatState {
     pub fn keyboard_key(&self, key: u32, state: KeyState) {
         self.for_all_keyboards(|keyboard, data| {
             if data.focus.is_some() {
-                keyboard.key(new_serial(), get_time(), key, state);
+                keyboard.key(new_serial(), get_time(), key - 8, state);
             }
         });
     }

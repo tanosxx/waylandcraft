@@ -354,10 +354,6 @@ public class WaylandCraftBridge {
 		keyboardInput(instance, scancode, 0);
 	}
 	
-	public void keyboardReset() {
-		keyboardReset(instance);
-	}
-	
 	public void resizeToplevelInteractive(WLCToplevel toplevel, int width, int height) {
 		toplevelResize(toplevel.getHandle(), width, height, true);
 	}
@@ -432,9 +428,6 @@ public class WaylandCraftBridge {
 	
 	// Keyboard input. scancode is the raw keycode. action: 0 is released, 1 is pressed.
 	private static native void keyboardInput(long instance, int scancode, int action);
-	
-	// Create and use a completely new wl_keyboard. Hack to make smithay and clients forget all pressed keys
-	private static native void keyboardReset(long instance);
 	
 	private static native void freeSurface(long instance, long handle);
 	private static native void freeToplevel(long instance, long handle);

@@ -116,8 +116,6 @@ public class WindowManagerScreen extends Screen {
 		addRenderableWidget(hideButton);
 		addRenderableWidget(resizeButton);
 		addRenderableWidget(stickyButton);
-		
-		wlc.bridge.keyboardReset();
 	}
 	
 	private void onGrabPressed(Button button) {
