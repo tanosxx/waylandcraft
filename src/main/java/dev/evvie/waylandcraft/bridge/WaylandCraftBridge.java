@@ -298,12 +298,11 @@ public class WaylandCraftBridge {
 	}
 	
 	public void sendMotion(WLCSurface surface, double x, double y) {
-		surfaceMotion(instance, surface.getHandle(), x, y);
+		pointerMotion(instance, surface.getHandle(), x, y);
 	}
 	
 	public void sendMotionOutside() {
-		long handle = 0;
-		surfaceMotion(instance, handle, 0.0, 0.0);
+		pointerLeave(instance);
 	}
 	
 	public void sendButton(int button, int state) {
@@ -416,8 +415,11 @@ public class WaylandCraftBridge {
 	// Check if point in surface input region
 	private static native boolean checkInputRegion(long surfaceHandle, double x, double y);
 	
-	// Create pointer motion event, handle can be 0 when under no surface
-	private static native void surfaceMotion(long instance, long handle, double x, double y);
+	// Create pointer motion event
+	private static native void pointerMotion(long instance, long handle, double x, double y);
+	
+	// Remove pointer focus from all surfaces
+	private static native void pointerLeave(long instance);
 	
 	// Create pointer button event. `button` has to be the linux button code, state is 1 for pressed, 0 for released
 	private static native void pointerButton(long instance, int button, int state);

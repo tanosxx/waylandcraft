@@ -1,5 +1,5 @@
 use std::ops::DerefMut;
-use crate::{WaylandCraft, wlc_init, get_time};
+use crate::{WaylandCraft, wlc_init};
 use crate::egl::{EGLHelper, EGLDisplay};
 use smithay::{
     wayland::{
@@ -17,23 +17,19 @@ use smithay::{
         single_pixel_buffer::get_single_pixel_buffer,
         dmabuf::get_dmabuf,
     },
-    input::{
-        pointer::{MotionEvent, ButtonEvent, AxisFrame},
-        keyboard::{self, XkbConfig},
-    },
-    utils::{Point, Logical, SERIAL_COUNTER, Size},
+    utils::{Point, Logical, Size},
     backend::{
         allocator::{
             dmabuf::WeakDmabuf,
             Buffer,
         },
-        input::{ButtonState, Axis, KeyState, Keycode},
     },
     reexports::{
         wayland_server::{
             protocol::{
                 wl_surface::WlSurface,
                 wl_buffer::WlBuffer,
+                wl_pointer::{ButtonState, Axis},
             },
         },
         wayland_protocols::xdg::shell::server::xdg_toplevel,
@@ -819,7 +815,7 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_updateSurfaceTree<'l>(
 
 #[unsafe(no_mangle)]
 pub extern "system"
-fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_surfaceMotion<'l>(
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_pointerMotion<'l>(
     _env: JNIEnv<'l>,
     _class: JClass<'l>,
     ptr: jlong,
@@ -828,25 +824,20 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_surfaceMotion<'l>(
     y: jdouble
 ) {
     let instance = jptr_to_instance(ptr);
-    let surface: Option<&mut WlSurface> = if handle != 0 {
-        Some(jptr_to_wlsurface(handle))
-    } else { None };
+    let surface = jptr_to_wlsurface(handle);
 
-    let pos: Point<f64, Logical> = Point::new(x, y);
-    let focus: Option<(WlSurface, Point<f64, Logical>)> =
-        surface.map(|s| (s.clone(), Point::new(0.0, 0.0)));
+    instance.state.seat.pointer_motion(surface.clone(), x, y);
+}
 
-    let pointer = instance.state.seat.get_pointer().unwrap();
-    pointer.motion(
-        &mut instance.state,
-        focus,
-        &MotionEvent {
-            location: pos,
-            serial: SERIAL_COUNTER.next_serial(),
-            time: get_time(),
-        }
-    );
-    pointer.frame(&mut instance.state);
+#[unsafe(no_mangle)]
+pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_pointerLeave<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    ptr: jlong
+) {
+    let instance = jptr_to_instance(ptr);
+    instance.state.seat.pointer_unfocus();
 }
 
 #[unsafe(no_mangle)]
@@ -866,17 +857,7 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_pointerButton<'l>(
         _ => {return;}
     };
 
-    let pointer = instance.state.seat.get_pointer().unwrap();
-    pointer.button(
-        &mut instance.state,
-        &ButtonEvent {
-            serial: SERIAL_COUNTER.next_serial(),
-            time: get_time(),
-            button: button as u32,
-            state
-        }
-    );
-    pointer.frame(&mut instance.state);
+    instance.state.seat.pointer_button(button as u32, state);
 }
 
 #[unsafe(no_mangle)]
@@ -891,19 +872,12 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_pointerAxis<'l>(
     let instance = jptr_to_instance(ptr);
 
     let axis = match axis {
-        0 => Axis::Vertical,
-        1 => Axis::Horizontal,
+        0 => Axis::VerticalScroll,
+        1 => Axis::HorizontalScroll,
         _ => {return;}
     };
 
-    let pointer = instance.state.seat.get_pointer().unwrap();
-    let event = AxisFrame::new(get_time()).value(axis, value);
-
-    pointer.axis(
-        &mut instance.state,
-        event,
-    );
-    pointer.frame(&mut instance.state);
+    instance.state.seat.pointer_axis(axis, value);
 }
 
 #[unsafe(no_mangle)]
@@ -911,9 +885,10 @@ pub extern "system"
 fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardFocus<'l>(
     _env: JNIEnv<'l>,
     _class: JClass<'l>,
-    ptr: jlong,
-    handle: jlong
+    _ptr: jlong,
+    _handle: jlong
 ) {
+    /*
     let instance = jptr_to_instance(ptr);
     let toplevel: Option<ToplevelSurface> = if handle != 0 {
         Some(jptr_to_toplevel(handle).clone())
@@ -941,6 +916,7 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardFocus<'l>(
     instance.state.xdg_state.toplevel_surfaces().iter().for_each(|t| {
         t.send_pending_configure();
     });
+    */
 }
 
 #[unsafe(no_mangle)]
@@ -948,10 +924,11 @@ pub extern "system"
 fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardInput<'l>(
     _env: JNIEnv<'l>,
     _class: JClass<'l>,
-    ptr: jlong,
-    scancode: jint,
-    action: jint
+    _ptr: jlong,
+    _scancode: jint,
+    _action: jint
 ) {
+    /*
     let instance = jptr_to_instance(ptr);
 
     let scancode = Keycode::new(scancode as u32);
@@ -970,6 +947,7 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardInput<'l>(
         get_time(),
         |_,_,_| keyboard::FilterResult::<()>::Forward
     );
+    */
 }
 
 #[unsafe(no_mangle)]
@@ -977,10 +955,10 @@ pub extern "system"
 fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardReset<'l>(
     _env: JNIEnv<'l>,
     _class: JClass<'l>,
-    ptr: jlong
+    _ptr: jlong
 ) {
-    let instance = jptr_to_instance(ptr);
-    instance.state.seat.add_keyboard(XkbConfig::default(), 200, 25).unwrap();
+    //let instance = jptr_to_instance(ptr);
+    //instance.state.seat.add_keyboard(XkbConfig::default(), 200, 25).unwrap();
 }
 
 #[unsafe(no_mangle)]

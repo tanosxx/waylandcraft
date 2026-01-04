@@ -1,5 +1,6 @@
 use crate::bridge::BridgeState;
 use crate::egl::EGLHelper;
+use crate::seat::WLCSeatState;
 use std::sync::Arc;
 use std::ops::DerefMut;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
@@ -35,13 +36,6 @@ use smithay::{
             XdgShellState, XdgShellHandler, ToplevelSurface, PopupSurface,
             PositionerState
         },
-        selection::{
-            data_device::{
-                DataDeviceState, DataDeviceHandler, ClientDndGrabHandler,
-                ServerDndGrabHandler,
-            },
-            SelectionHandler,
-        },
         viewporter::ViewporterState,
         dmabuf::{
             DmabufState, DmabufGlobal, DmabufFeedbackBuilder, DmabufHandler,
@@ -57,17 +51,16 @@ use smithay::{
     },
     output::{self, Output, PhysicalProperties, Subpixel},
     input::{
-        keyboard::XkbConfig,
-        SeatState, SeatHandler, Seat
+        SeatState, SeatHandler,
     },
     utils::Serial,
-    delegate_compositor, delegate_shm, delegate_output, delegate_seat,
-    delegate_xdg_shell, delegate_data_device, delegate_viewporter,
-    delegate_single_pixel_buffer, delegate_dmabuf
+    delegate_compositor, delegate_shm, delegate_output, delegate_xdg_shell,
+    delegate_viewporter, delegate_single_pixel_buffer, delegate_dmabuf
 };
 
 mod bridge;
 mod egl;
+mod seat;
 
 pub(crate) struct WaylandCraft<'a> {
     pub state: WLCState,
@@ -81,14 +74,12 @@ pub struct WLCState {
     pub socket: OsString,
     pub compositor_state: CompositorState,
     pub shm_state: ShmState,
-    pub seat_state: SeatState<Self>,
     pub xdg_state: XdgShellState,
-    pub data_device_state: DataDeviceState,
     pub viewporter_state: ViewporterState,
     pub single_pixel_buffer_state: SinglePixelBufferState,
     pub dmabuf_state: DmabufState,
     pub dmabuf_global: DmabufGlobal,
-    pub seat: Seat<Self>,
+    pub seat: WLCSeatState,
     pub minimized_toplevels: Vec<ToplevelSurface>,
     pub maximized_toplevels: Vec<ToplevelSurface>,
     pub unmaximized_toplevels: Vec<ToplevelSurface>,
@@ -98,15 +89,7 @@ impl WLCState {
     fn new(disp: DisplayHandle, egl: &EGLHelper) -> Self {
         let compositor_state = CompositorState::new::<WLCState>(&disp);
         let shm_state = ShmState::new::<WLCState>(&disp, vec![]);
-
-        let mut seat_state = SeatState::<WLCState>::new();
-        let mut seat = seat_state.new_wl_seat(&disp, "seat-0");
-        seat.add_pointer();
-        seat.add_keyboard(XkbConfig::default(), 200, 25)
-            .expect("Keyboard create");
-
         let xdg_state = XdgShellState::new::<WLCState>(&disp);
-        let data_device_state = DataDeviceState::new::<WLCState>(&disp);
         let viewporter_state = ViewporterState::new::<WLCState>(&disp);
         let single_pixel_buffer_state =
             SinglePixelBufferState::new::<WLCState>(&disp);
@@ -114,14 +97,15 @@ impl WLCState {
         let mut dmabuf_state = DmabufState::new();
         let dmabuf_global = init_dmabuf(&disp, &mut dmabuf_state, egl);
 
+        let seat = WLCSeatState::new();
+        seat.create_global(&disp);
+
         Self {
             display_handle: disp.clone(),
             socket: OsString::new(),
             compositor_state,
             shm_state,
-            seat_state,
             xdg_state,
-            data_device_state,
             viewporter_state,
             single_pixel_buffer_state,
             dmabuf_state,
@@ -196,13 +180,14 @@ impl DmabufHandler for WLCState {
 
 impl OutputHandler for WLCState {}
 
+// Dummy SeatHandler impl neeeded for XdgPopup Dispatch for delegate_xdg_shell
 impl SeatHandler for WLCState {
     type KeyboardFocus = WlSurface;
     type PointerFocus = WlSurface;
     type TouchFocus = WlSurface;
 
     fn seat_state(&mut self) -> &mut SeatState<Self> {
-        &mut self.seat_state
+        panic!("seat_state was called on dummy SeatHandler impl")
     }
 }
 
@@ -255,19 +240,6 @@ impl XdgShellHandler for WLCState {
         self.unmaximized_toplevels.push(surface);
     }
 }
-
-impl DataDeviceHandler for WLCState {
-    fn data_device_state(&self) -> &DataDeviceState {
-        &self.data_device_state
-    }
-}
-
-impl SelectionHandler for WLCState {
-    type SelectionUserData = ();
-}
-
-impl ClientDndGrabHandler for WLCState {}
-impl ServerDndGrabHandler for WLCState {}
 
 pub(crate) struct WLCClient {
     compositor_state: CompositorClientState,
@@ -413,9 +385,7 @@ impl<'a> WaylandCraft<'a> {
 delegate_compositor!(WLCState);
 delegate_shm!(WLCState);
 delegate_output!(WLCState);
-delegate_seat!(WLCState);
 delegate_xdg_shell!(WLCState);
-delegate_data_device!(WLCState);
 delegate_viewporter!(WLCState);
 delegate_single_pixel_buffer!(WLCState);
 delegate_dmabuf!(WLCState);
