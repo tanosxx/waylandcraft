@@ -114,6 +114,11 @@ public class WLCSurface {
 		}
 	}
 	
+	protected void removeBuffer() {
+		this.buffer = null;
+		this.width = this.height = 0;
+	}
+	
 	// Set viewport source dimensions
 	// Crops the surface to the specified rectangle.
 	protected void setViewportSrc(double x, double y, double width, double height) {

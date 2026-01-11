@@ -495,14 +495,15 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_updateSurfaceData<'l>(
             .deref_mut()
             .current();
 
-        let maybe_buf = if let Some(assign) = &attr.buffer {
+        let (maybe_buf, remove_buf) = if let Some(assign) = &attr.buffer {
             match assign {
-                BufferAssignment::NewBuffer(b) => Some(b),
-                BufferAssignment::Removed => None,
+                BufferAssignment::NewBuffer(b) => (Some(b), false),
+                BufferAssignment::Removed => (None, true),
             }
         } else {
-            None
+            (None, false)
         };
+
         if let Some(buf) = maybe_buf {
             // First try shm
             let mut r = try_attach_shm(&mut env, &obj, &buf, &data);
@@ -522,6 +523,17 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_updateSurfaceData<'l>(
             // Done with buffer attachment
             buf.release();
             attr.buffer = None;
+        }
+
+        if remove_buf {
+            unsafe {
+                env.call_method_unchecked(
+                    &obj,
+                    (WLCSurface_class, "removeBuffer", "()V"),
+                    ReturnType::Primitive(Primitive::Void),
+                    &[]
+                ).unwrap();
+            }
         }
 
         let mut vp_data_guard = data
