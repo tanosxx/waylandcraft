@@ -15,7 +15,7 @@ use smithay::{
                 wl_keyboard::{self, WlKeyboard, KeymapFormat, KeyState},
             },
             DisplayHandle, Client, GlobalDispatch, Dispatch, New, DataInit,
-            Resource, WEnum,
+            Resource,
         },
         wayland_protocols::wp::relative_pointer::zv1::server::{
             zwp_relative_pointer_manager_v1 as zwp_rpm,
@@ -51,15 +51,16 @@ pub struct WLCPointerData {
     relative_pointers: Vec<ZwpRelativePointerV1>,
     // Pointer position lock
     lock: Option<WLCPointerLock>,
-    // Pointer confined lock
-    confined: Option<WLCPointerLock>,
+    // Pointer confined surface
+    confined: Option<WlSurface>,
 }
 
 type WLCPointer = Arc<Mutex<WLCPointerData>>;
 
 pub struct WLCPointerLock {
+    locked_pointer: ZwpLockedPointerV1,
     surface: WlSurface,
-    oneshot: bool,
+    active: bool, // Activated event sent
 }
 
 pub struct WLCKeyboardData {
@@ -545,7 +546,7 @@ fn has_existing_constraint(
         if let Some(lock) = &data.lock && lock.surface == *surface {
             err = true;
         }
-        if let Some(lock) = &data.confined && lock.surface == *surface {
+        if let Some(lsurf) = &data.confined && lsurf == surface {
             err = true;
         }
     });
@@ -565,7 +566,7 @@ impl Dispatch<ZwpPointerConstraintsV1, ()> for WLCState {
         match request {
             zwp_constraints::Request::Destroy => {},
             zwp_constraints::Request::LockPointer {
-                id, surface, pointer, lifetime, ..
+                id, surface, pointer, ..
             } => {
                 if has_existing_constraint(state, &pointer, &surface) {
                     resource.post_error(
@@ -575,21 +576,18 @@ impl Dispatch<ZwpPointerConstraintsV1, ()> for WLCState {
                     return;
                 }
 
-                let oneshot = lifetime == WEnum::Value(
-                    zwp_constraints::Lifetime::Oneshot
-                );
+                let lock_resource = data_init.init(id, pointer.clone());
 
                 with_pointer_data(&pointer, |data| {
                     data.lock = Some(WLCPointerLock {
+                        locked_pointer: lock_resource,
                         surface: surface.clone(),
-                        oneshot,
+                        active: false,
                     });
                 });
-
-                let _lock_resource = data_init.init(id, pointer.clone());
             },
             zwp_constraints::Request::ConfinePointer {
-                id, surface, pointer, lifetime, ..
+                id, surface, pointer, ..
             } => {
                 if has_existing_constraint(state, &pointer, &surface) {
                     resource.post_error(
@@ -599,15 +597,8 @@ impl Dispatch<ZwpPointerConstraintsV1, ()> for WLCState {
                     return;
                 }
 
-                let oneshot = lifetime == WEnum::Value(
-                    zwp_constraints::Lifetime::Oneshot
-                );
-
                 with_pointer_data(&pointer, |data| {
-                    data.confined = Some(WLCPointerLock {
-                        surface: surface.clone(),
-                        oneshot,
-                    });
+                    data.confined = Some(surface.clone());
                 });
 
                 let _confine_resource = data_init.init(id, pointer.clone());
