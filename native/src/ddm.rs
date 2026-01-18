@@ -9,6 +9,7 @@ use smithay::{
                 wl_data_device_manager::WlDataDeviceManager as WlDDM,
                 wl_data_source::{self, WlDataSource},
                 wl_data_device::{self, WlDataDevice},
+                wl_data_offer::{self, WlDataOffer},
             },
             backend::ClientId,
             DisplayHandle, DataInit, New, GlobalDispatch, Dispatch, Client,
@@ -18,20 +19,26 @@ use smithay::{
 };
 use rustix::{
     fd::{AsFd, OwnedFd},
-    io::read,
+    io::{read, write},
     pipe::{pipe_with, PipeFlags},
 };
 
 pub struct WLCDataState {
     pub devices: Vec<WlDataDevice>,
     pub sources: Vec<WlDataSource>,
+    pub clipboard: Option<String>,
+    display_handle: DisplayHandle,
 }
 
+type WLCDataSource = Arc<Mutex<WLCDataSourceData>>;
 struct WLCDataSourceData {
     mime: Vec<String>,
 }
 
-type WLCDataSource = Arc<Mutex<WLCDataSourceData>>;
+type WLCDataDevice = Arc<Mutex<WLCDataDeviceData>>;
+struct WLCDataDeviceData {
+    offer: Option<WlDataOffer>,
+}
 
 fn with_source_data<F, R>(source: &WlDataSource, f: F) -> R
     where F: FnOnce(&mut WLCDataSourceData) -> R
@@ -45,16 +52,59 @@ fn with_source_data<F, R>(source: &WlDataSource, f: F) -> R
     f(data)
 }
 
+fn with_device_data<F, R>(device: &WlDataDevice, f: F) -> R
+    where F: FnOnce(&mut WLCDataDeviceData) -> R
+{
+    let mut guard = device
+        .data::<WLCDataDevice>()
+        .unwrap()
+        .lock()
+        .unwrap();
+    let data = guard.deref_mut();
+    f(data)
+}
+
+const CLIPBOARD_MIME: &'static str = "text/plain;charset=utf-8";
+
 impl WLCDataState {
-    pub fn new() -> Self {
+    pub fn new(display_handle: &DisplayHandle) -> Self {
         WLCDataState {
             devices: vec![],
             sources: vec![],
+            clipboard: None,
+            display_handle: display_handle.clone(),
         }
     }
 
-    pub fn create_global(&self, disp: &DisplayHandle) {
-        disp.create_global::<WLCState, WlDDM, ()>(3, ());
+    pub fn create_global(&self) {
+        self.display_handle.create_global::<WLCState, WlDDM, ()>(3, ());
+    }
+
+    // Send clipboard data to client
+    // `client` has to be the client currently holding keyboard focus!
+    pub fn send_clipboard(&self, client: Client) {
+        self.for_all_devices(|device, data| {
+            if device.client().is_some_and(|c| c == client) {
+                let offer = client.create_resource::<
+                    WlDataOffer, (), WLCState
+                >(&self.display_handle, device.version(), ()).unwrap();
+
+                device.data_offer(&offer);
+                offer.offer(CLIPBOARD_MIME.into());
+                device.selection(Some(&offer));
+                data.offer = Some(offer);
+            } else {
+                data.offer = None;
+            }
+        });
+    }
+
+    fn for_all_devices<F>(&self, mut f: F)
+        where F: FnMut(&WlDataDevice, &mut WLCDataDeviceData)
+    {
+        for device in &self.devices {
+            with_device_data(device, |data| f(device, data));
+        }
     }
 }
 
@@ -92,7 +142,11 @@ impl Dispatch<WlDDM, ()> for WLCState {
                 state.data.sources.push(source);
             },
             wl_ddm::Request::GetDataDevice { id, .. } => {
-                let device = data_init.init(id, ());
+                let device_data = WLCDataDeviceData {
+                    offer: None,
+                };
+                let device_data = Arc::new(Mutex::new(device_data));
+                let device = data_init.init(id, device_data.clone());
 
                 state.data.devices.push(device);
             },
@@ -135,7 +189,7 @@ impl Dispatch<WlDataSource, WLCDataSource> for WLCState {
 
 fn read_file_descriptor(fd: OwnedFd) -> Vec<u8> {
     let mut data: Vec<u8> = vec![];
-    let mut buf: [u8; 16] = [0; 16];
+    let mut buf: [u8; 2048] = [0; 2048];
     loop {
         let len = read(&fd, &mut buf).expect("pipe read");
         if len == 0 {
@@ -147,37 +201,36 @@ fn read_file_descriptor(fd: OwnedFd) -> Vec<u8> {
     data
 }
 
-impl Dispatch<WlDataDevice, ()> for WLCState {
+impl Dispatch<WlDataDevice, WLCDataDevice> for WLCState {
     fn request(
         state: &mut Self,
         _client: &Client,
         _device: &WlDataDevice,
         request: wl_data_device::Request,
-        _data: &(),
+        _data: &WLCDataDevice,
         _disp: &DisplayHandle,
         _data_init: &mut DataInit<'_, Self>,
     ) {
         match request {
             wl_data_device::Request::StartDrag { .. } => {},
             wl_data_device::Request::SetSelection { source, serial: _ } => {
-                let text_mime = "text/plain;charset=utf-8";
                 if let Some(source) = source {
                     with_source_data(&source, |data| {
-                        if !data.mime.iter().any(|s| s == text_mime) {
+                        if !data.mime.iter().any(|s| s == CLIPBOARD_MIME) {
                             return;
                         }
                         let (read_fd, write_fd) =
                             pipe_with(PipeFlags::CLOEXEC)
                             .expect("pipe open");
-                        source.send(text_mime.into(), write_fd.as_fd());
+                        source.send(CLIPBOARD_MIME.into(), write_fd.as_fd());
                         state.display_handle.flush_clients().unwrap();
                         drop(write_fd);
 
                         let data = read_file_descriptor(read_fd);
-                        println!(
-                            "SELECTION '{}'",
-                            String::from_utf8(data).unwrap()
-                        );
+                        if let Ok(data) = String::from_utf8(data) {
+                            println!("SELECTION '{}'", data);
+                            state.data.clipboard = Some(data);
+                        }
                     });
                 }
             },
@@ -190,8 +243,46 @@ impl Dispatch<WlDataDevice, ()> for WLCState {
         state: &mut Self,
         _client: ClientId,
         device: &WlDataDevice,
-        _data: &(),
+        _data: &WLCDataDevice,
     ) {
         state.data.devices.retain(|d| d != device);
+    }
+}
+
+impl Dispatch<WlDataOffer, ()> for WLCState {
+    fn request(
+        state: &mut Self,
+        _client: &Client,
+        _resource: &WlDataOffer,
+        request: wl_data_offer::Request,
+        _data: &(),
+        _disp: &DisplayHandle,
+        _data_init: &mut DataInit<'_, Self>,
+    ) {
+        match request {
+            wl_data_offer::Request::Receive { mime_type, fd } => {
+                if mime_type != CLIPBOARD_MIME {
+                    return;
+                }
+                if let Some(content) = &state.data.clipboard {
+                    write(fd, content.as_bytes())
+                        .expect("wl_data_offer write");
+                }
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    fn destroyed(
+        state: &mut Self,
+        _client: ClientId,
+        resource: &WlDataOffer,
+        _data: &(),
+    ) {
+        state.data.for_all_devices(|_device, data| {
+            if data.offer.as_ref().is_some_and(|o| o == resource) {
+                data.offer = None;
+            }
+        });
     }
 }

@@ -112,8 +112,8 @@ impl WLCState {
         let seat = WLCSeatState::new();
         seat.create_globals(&disp);
 
-        let data = WLCDataState::new();
-        data.create_global(&disp);
+        let data = WLCDataState::new(&disp);
+        data.create_global();
 
         Self {
             display_handle: disp.clone(),
