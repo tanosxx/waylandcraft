@@ -132,7 +132,7 @@ public class WindowManagerScreen extends Screen {
 	}
 	
 	private void onResizePressed(Button button) {
-		if(focused == null) return;
+		if(focused == null || focused.fullscreen) return;
 		
 		wlc.bridge.sendMotionOutside();
 		GLFW.glfwSetInputMode(Minecraft.getInstance().getWindow().getWindow(), GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_DISABLED);
@@ -261,7 +261,7 @@ public class WindowManagerScreen extends Screen {
 			stickyButton.setMessage(Component.literal("Sticky"));
 		}
 		
-		super.render(context, i, j, f);
+		if(!(focused != null && focused.fullscreen)) super.render(context, i, j, f);
 	}
 	
 	@Override
@@ -438,8 +438,18 @@ public class WindowManagerScreen extends Screen {
 	}
 	
 	private void prepareToplevel(WLCToplevel toplevel) {
-		float x = margin * guiScale + Math.max(0, areaWidth * guiScale / 2 - toplevel.geometry.width() / 2);
-		float y = topMargin * guiScale + Math.max(0, areaHeight * guiScale / 2 - toplevel.geometry.height() / 2);
+		float x;
+		float y;
+		
+		if(!toplevel.fullscreen) {
+			x = margin * guiScale + Math.max(0, areaWidth * guiScale / 2 - toplevel.geometry.width() / 2);
+			y = topMargin * guiScale + Math.max(0, areaHeight * guiScale / 2 - toplevel.geometry.height() / 2);
+		}
+		else {
+			x = 0;
+			y = 0;
+		}
+		
 		x -= toplevel.geometry.x();
 		y -= toplevel.geometry.y();
 		
