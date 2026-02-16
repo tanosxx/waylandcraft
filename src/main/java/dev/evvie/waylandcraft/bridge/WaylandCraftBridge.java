@@ -385,12 +385,20 @@ public class WaylandCraftBridge {
 		toplevelResize(toplevel.getHandle(), width, height, false);
 	}
 	
+	public void resizeToplevelOverride(WLCToplevel toplevel, int width, int height) {
+		toplevelResizeOvr(toplevel.getHandle(), width, height);
+	}
+	
 	public void maximizeToplevel(WLCToplevel toplevel) {
-		toplevelMaximize(toplevel.getHandle());
+		toplevelMaximize(instance, toplevel.getHandle());
 	}
 	
 	public void fullscreenToplevel(WLCToplevel toplevel) {
-		toplevelFullscreen(toplevel.getHandle());
+		toplevelFullscreen(instance, toplevel.getHandle());
+	}
+	
+	public void resizeOutput(int width, int height) {
+		outputResize(instance, width, height);
 	}
 	
 	public String resolveName(String appID) {
@@ -414,6 +422,8 @@ public class WaylandCraftBridge {
 	private static native String toplevelAppID(long handle);
 	// Resize toplevel
 	private static native void toplevelResize(long handle, int width, int height, boolean interactive);
+	// Resize toplevel override, keep maximized and fullscreen state, stop interactive resize
+	private static native void toplevelResizeOvr(long handle, int width, int height);
 	
 	// Collect all toplevels that have sent a minimize request and clear the list
 	private static native long[] minimizeReq(long instance);
@@ -426,8 +436,8 @@ public class WaylandCraftBridge {
 	// Collect all toplevels that have sent an unfullscreen request and clear the list
 	private static native long[] unfullscreenReq(long instance);
 	
-	private static native void toplevelMaximize(long handle);
-	private static native void toplevelFullscreen(long handle);
+	private static native void toplevelMaximize(long instance, long handle);
+	private static native void toplevelFullscreen(long instance, long handle);
 	
 	private static native long[] popups(long instance);
 	private static native long popupSurface(long instance, long handle);
@@ -480,6 +490,9 @@ public class WaylandCraftBridge {
 	
 	// Update internal key state
 	private static native void keyboardUpdate(long instance, int scancode, boolean pressed);
+	
+	// Update virtual output dimensions
+	private static native void outputResize(long instance, int width, int height);
 	
 	private static native void freeSurface(long instance, long handle);
 	private static native void freeToplevel(long instance, long handle);

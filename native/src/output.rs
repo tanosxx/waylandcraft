@@ -14,7 +14,7 @@ use smithay::{
 
 pub struct WLCOutput {
     pub outputs: Vec<WlOutput>,
-    pub size: Size<i32, Physical>,
+    size: Size<i32, Physical>,
     display_handle: DisplayHandle,
 }
 
@@ -29,6 +29,25 @@ impl WLCOutput {
 
     pub fn create_global(&self) {
         self.display_handle.create_global::<WLCState, WlOutput, ()>(4, ());
+    }
+
+    pub fn width(&self) -> i32 {
+        self.size.w
+    }
+
+    pub fn height(&self) -> i32 {
+        self.size.h
+    }
+
+    pub fn resize(&mut self, width: i32, height: i32) {
+        self.size = Size::new(width, height);
+        let flags = wl_output::Mode::Current;
+        for output in &self.outputs {
+            output.mode(flags, self.size.w, self.size.h, 0);
+            if output.version() >= 2 {
+                output.done();
+            }
+        }
     }
 }
 

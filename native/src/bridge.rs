@@ -1065,6 +1065,39 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardUpdate<'l>(
 
 #[unsafe(no_mangle)]
 pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_outputResize<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    handle: jlong,
+    width: jint,
+    height: jint
+) {
+    let instance = jptr_to_instance(handle);
+    let width_changed = instance.state.output.width() != width;
+    let height_changed = instance.state.output.height() != height;
+
+    if !width_changed && !height_changed {
+        return;
+    }
+
+    instance.state.output.resize(width, height);
+
+    for toplevel in instance.state.xdg_state.toplevel_surfaces() {
+        toplevel.with_pending_state(|state| {
+            let fullscreen = state.states
+                .contains(xdg_toplevel::State::Fullscreen);
+            let maximized = state.states
+                .contains(xdg_toplevel::State::Maximized);
+            if fullscreen || maximized {
+                state.size = Some(Size::new(width, height));
+            }
+        });
+        toplevel.send_pending_configure();
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system"
 fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_checkInputRegion<'l>(
     _env: JNIEnv<'l>,
     _class: JClass<'l>,
@@ -1191,16 +1224,37 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_toplevelResize<'l>(
 
 #[unsafe(no_mangle)]
 pub extern "system"
-fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_toplevelMaximize<'l>(
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_toplevelResizeOvr<'l>(
     _env: JNIEnv<'l>,
     _class: JClass<'l>,
-    handle: jlong
+    handle: jlong,
+    width: jint,
+    height: jint
 ) {
     let toplevel = jptr_to_toplevel(handle);
 
     toplevel.with_pending_state(|state| {
+        state.size = Some(Size::new(width, height));
+        state.states.unset(xdg_toplevel::State::Resizing);
+    });
+    toplevel.send_pending_configure();
+}
+
+#[unsafe(no_mangle)]
+pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_toplevelMaximize<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    ptr: jlong,
+    handle: jlong
+) {
+    let instance = jptr_to_instance(ptr);
+    let toplevel = jptr_to_toplevel(handle);
+
+    toplevel.with_pending_state(|state| {
         if state.states.contains(xdg_toplevel::State::Fullscreen) { return }
-        state.size = Some(Size::new(1920, 1080));
+        let output = &instance.state.output;
+        state.size = Some(Size::new(output.width(), output.height()));
         state.states.set(xdg_toplevel::State::Maximized);
     });
     toplevel.send_configure();
@@ -1211,12 +1265,15 @@ pub extern "system"
 fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_toplevelFullscreen<'l>(
     _env: JNIEnv<'l>,
     _class: JClass<'l>,
+    ptr: jlong,
     handle: jlong
 ) {
+    let instance = jptr_to_instance(ptr);
     let toplevel = jptr_to_toplevel(handle);
 
     toplevel.with_pending_state(|state| {
-        state.size = Some(Size::new(1920, 1080));
+        let output = &instance.state.output;
+        state.size = Some(Size::new(output.width(), output.height()));
         state.states.set(xdg_toplevel::State::Fullscreen);
     });
     toplevel.send_configure();

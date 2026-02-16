@@ -174,6 +174,7 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 			displays.forEach((w) -> w.render(context));
 			
 			sendMotionEvents();
+			updateOutputSize();
 		});
 		
 		ClientTickEvents.END_CLIENT_TICK.register((mc) -> {
@@ -238,6 +239,7 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 				
 				int size = 200;
 				stickyToplevelScale = size / (float) Math.max(geometry.width(), geometry.height());
+				
 				float x = 0 + (-buf.getXOff() - geometry.x()) * stickyToplevelScale;
 				float y = 0 + (-buf.getYOff() - geometry.y()) * stickyToplevelScale;
 				
@@ -248,6 +250,27 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 		CoreShaderRegistrationCallback.EVENT.register(context -> {
 			RenderUtils.registerShaders(context);
 		});
+	}
+	
+	private void updateOutputSize() {
+		int outputWidth = Minecraft.getInstance().getWindow().getWidth();
+		int outputHeight = Minecraft.getInstance().getWindow().getHeight();
+		bridge.resizeOutput(outputWidth, outputHeight);
+		
+		for(WLCToplevel toplevel : bridge.getToplevels()) {
+			int w = toplevel.geometry.width();
+			int h = toplevel.geometry.height();
+			
+			if(w <= outputWidth && h <= outputHeight) {
+				continue;
+			}
+			
+			toplevel.restoreGeometry = null;
+			
+			w = Math.min(w, outputWidth);
+			h = Math.min(h, outputHeight);
+			bridge.resizeToplevelOverride(toplevel, w, h);
+		}
 	}
 	
 	public WindowDisplay getOrCreateDisplay(WLCToplevel toplevel) {
