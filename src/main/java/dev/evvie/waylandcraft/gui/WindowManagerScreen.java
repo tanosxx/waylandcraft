@@ -31,6 +31,7 @@ public class WindowManagerScreen extends Screen {
 	private WaylandCraft wlc;
 	
 	private SelectorWidget<WLCToplevel> selector;
+	private ArrayList<Button> buttons = new ArrayList<Button>();
 	private Button grabButton;
 	private Button hideButton;
 	private Button resizeButton;
@@ -96,21 +97,25 @@ public class WindowManagerScreen extends Screen {
 				.pos(width - margin - buttonWidth, margin)
 				.size(buttonWidth, buttonHeight)
 				.build();
+		buttons.add(grabButton);
 		
 		hideButton = Button.builder(Component.literal("Hide"), this::onHidePressed)
 				.pos(width - margin - buttonWidth, margin + buttonHeight)
 				.size(buttonWidth, buttonHeight)
 				.build();
+		buttons.add(hideButton);
 		
 		resizeButton = Button.builder(Component.literal("Resize"), this::onResizePressed)
 				.pos(width / 2 - buttonWidth / 2, margin + buttonHeight)
 				.size(buttonWidth, buttonHeight)
 				.build();
+		buttons.add(resizeButton);
 		
 		stickyButton = Button.builder(Component.literal("Sticky"), this::onStickyPressed)
 				.pos(margin, margin)
 				.size(buttonWidth, buttonHeight)
 				.build();
+		buttons.add(stickyButton);
 		
 		addRenderableWidget(grabButton);
 		addRenderableWidget(hideButton);
@@ -261,7 +266,15 @@ public class WindowManagerScreen extends Screen {
 			stickyButton.setMessage(Component.literal("Sticky"));
 		}
 		
-		if(!(focused != null && focused.fullscreen)) super.render(context, i, j, f);
+		buttons.forEach((b) -> b.visible = true);
+		selector.visible = true;
+		
+		if(focused != null && focused.fullscreen) {
+			buttons.forEach((b) -> b.visible = false);
+			selector.visible = false;
+		}
+		
+		super.render(context, i, j, f);
 	}
 	
 	@Override

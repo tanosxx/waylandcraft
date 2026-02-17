@@ -104,6 +104,7 @@ public abstract class SelectorWidget<T> extends AbstractWidget {
 		for(int i = 0; i < buttons.size(); i++) {
 			SelectorButton<T> b = buttons.get(i);
 			
+			b.visible = this.visible;
 			b.selected = b.element == selected;
 			
 			if(b.element != null) {
