@@ -11,7 +11,12 @@
 		"ItemRendererMixin",
 		"ItemInHandRendererMixin",
 		"IItemInHandRendererMixin",
-		"MinecraftMixin"
+		"MinecraftMixin",
+		"InventoryMenuMixin",
+		"InventoryScreenMixin",
+		"CreativeModeInventoryScreenMixin",
+		"ISlotMixin",
+		"ICreativeModeInventoryScreenSlotWrapperMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
