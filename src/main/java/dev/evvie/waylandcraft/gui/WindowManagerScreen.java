@@ -179,9 +179,7 @@ public class WindowManagerScreen extends Screen {
 	
 	private void onItemPressed(Button button) {
 		if(focused == null) return;
-		
-		// Adding a toplevel to this list has the effect of it being given to the player next tick
-		wlc.newToplevels.add(focused);
+		wlc.itemManager.giveItem(focused);
 	}
 	
 	private void exitResizeMode() {

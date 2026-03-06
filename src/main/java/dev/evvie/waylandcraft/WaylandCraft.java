@@ -1,14 +1,9 @@
 package dev.evvie.waylandcraft;
 
-import java.awt.Color;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 import org.lwjgl.glfw.GLFW;
-import org.lwjgl.opengl.GL33;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,30 +18,28 @@ import dev.evvie.waylandcraft.bridge.WLCSurface;
 import dev.evvie.waylandcraft.bridge.WLCToplevel;
 import dev.evvie.waylandcraft.bridge.WaylandCraftBridge;
 import dev.evvie.waylandcraft.bridge.WaylandCraftBridge.Size;
+import dev.evvie.waylandcraft.gui.WaylandHudRenderer;
 import dev.evvie.waylandcraft.gui.WindowManagerScreen;
 import dev.evvie.waylandcraft.item.WindowItem;
+import dev.evvie.waylandcraft.item.WindowItemManager;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.CoreShaderRegistrationCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.ChatFormatting;
+import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.minecraft.client.Camera;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.Style;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 public class WaylandCraft implements ModInitializer, ClientModInitializer {
@@ -57,6 +50,8 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 	public static WaylandCraft instance;
 	
 	public WaylandCraftBridge bridge = null;
+	public String waylandSocket = "";
+	
 	public ArrayList<WindowDisplay> displays = new ArrayList<WindowDisplay>();
 	public DisplayHitResult hitResult = null;
 	
@@ -67,13 +62,13 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 	
 	public WLCToplevel pinnedToplevel = null;
 	
-	public List<WLCToplevel> newToplevels = new ArrayList<WLCToplevel>();
-	
+	public WindowItemManager itemManager = new WindowItemManager(this);
 	public XDGDesktopManager xdgManager = new XDGDesktopManager();
 	
 	public KeyMapping keyOpenScreen;
 	
 	public WindowInHandRenderer windowInHandRenderer = new WindowInHandRenderer();
+	public WaylandHudRenderer hudRenderer = new WaylandHudRenderer(this);
 	
 	@Override
 	public void onInitialize() {
@@ -88,236 +83,147 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 		
 		keyOpenScreen = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.windowManager", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, KEYBIND_CATEGORY));
 		
-		WorldRenderEvents.AFTER_ENTITIES.register(context -> {
-			if(bridge == null) {
-				bridge = WaylandCraftBridge.start();
-				String socket = bridge.getSocket();
-				Minecraft.getInstance().gui.getChat().addMessage(Component.literal("Server started on " + socket));
-			}
-			bridge.update();
-			
-			for(WLCPopup popup : bridge.getPopups()) {
-				WLCAbstractWindow root = popup;
-				while((root = ((WLCPopup) root).getParent()) instanceof WLCPopup);
-				
-				WLCToplevel toplevel = (WLCToplevel) root;
-				boolean toplevelHasWindow = hasDisplayFor(toplevel);
-				boolean popupHasWindow = hasDisplayFor(popup);
-				if(toplevelHasWindow && !popupHasWindow) {
-					getOrCreateDisplay(popup);
-				}
-				else if(!toplevelHasWindow && popupHasWindow) {
-					displays.removeIf((w) -> w.window == popup);
-				}
-			}
-			
-			displays.removeIf((d) -> !d.isValid());
-			displays.forEach((d) -> d.updateGeometry());
-			
-			for(WLCPopup popup : bridge.getPopups()) {
-				anchorToParent(popup);
-			}
-			
-			// Hide all windows that were minimized and unset minimize requested state
-			displays.removeIf((w) -> w.window instanceof WLCToplevel && ((WLCToplevel) w.window).requests.minimize);
-			Stream.of(bridge.getToplevels()).forEach((t) -> t.requests.minimize = false);
-			
-			// Handle any maximize or unmaximize requests
-			for(WLCToplevel toplevel : bridge.getToplevels()) {
-				if(toplevel.requests.maximize && toplevel.requests.unmaximize) {
-					// Both requests shouldn't happen at the same time
-					toplevel.restoreGeometry = null;
-				}
-				else if(toplevel.requests.maximize) {
-					// Maximize toplevel and store its old geometry
-					toplevel.restoreGeometry = toplevel.geometry;
-					bridge.maximizeToplevel(toplevel);
-				}
-				else if(toplevel.requests.unmaximize) {
-					// Unmaximize toplevel and attempt to restore old geometry
-					SurfaceGeometry newGeometry = toplevel.restoreGeometry;
-					if(newGeometry == null) newGeometry = toplevel.geometry;
-					
-					// resizeToplevel also unsets the maximize flag
-					bridge.resizeToplevel(toplevel, newGeometry.width(), newGeometry.height());
-					toplevel.restoreGeometry = null;
-				}
-				
-				toplevel.requests.maximize = toplevel.requests.unmaximize = false;
-			}
-			
-			// Handle any fullscreen or unfullscreen requests
-			for(WLCToplevel toplevel : bridge.getToplevels()) {
-				if(toplevel.requests.fullscreen && toplevel.requests.unfullscreen) {
-					// Both requests shouldn't happen at the same time
-					toplevel.restoreGeometry = null;
-				}
-				else if(toplevel.requests.fullscreen) {
-					// Fullscreen toplevel and store its old geometry
-					toplevel.restoreGeometry = toplevel.geometry;
-					bridge.fullscreenToplevel(toplevel);
-				}
-				else if(toplevel.requests.unfullscreen) {
-					// Unfullscreen toplevel and attempt to restore old geometry
-					SurfaceGeometry newGeometry = toplevel.restoreGeometry;
-					if(newGeometry == null) newGeometry = toplevel.geometry;
-					
-					// resizeToplevel also unsets the fullscreen flag
-					bridge.resizeToplevel(toplevel, newGeometry.width(), newGeometry.height());
-					toplevel.restoreGeometry = null;
-				}
-				
-				toplevel.requests.fullscreen = toplevel.requests.unfullscreen = false;
-			}
-			
-			newToplevels.addAll(Arrays.asList(bridge.getNewToplevels()));
-			
-			if(grabbedDisplay != null && !grabbedDisplay.isValid()) grabbedDisplay = null;
-			if(grabbedDisplay != null) anchorToCamera(grabbedDisplay, context.camera());
-			
-			boolean inWMScreen = Minecraft.getInstance().screen instanceof WindowManagerScreen;
-			
-			// Make sure the toplevels are focused in their respective order and being refocused when a toplevel disappears
-			if(!inWMScreen) {
-				WLCToplevel focus = bridge.getMostToLeastRecentFocus()
-						.filter((t) -> hasDisplayFor(t))
-						.findFirst()
-						.orElse(null);
-				
-				bridge.focusSurface(focus);
-				
-				if(keyboardCapture != focus) {
-					keyboardCapture = null;
-				}
-			}
-			
-			RenderSystem.enableDepthTest();
-			displays.forEach((w) -> w.render(context));
-			
-			sendMotionEvents();
-			updateOutputSize(inWMScreen);
-		});
+		WorldRenderEvents.AFTER_ENTITIES.register(this::renderWorld);
+		ClientTickEvents.END_CLIENT_TICK.register(this::onClientTick);
+		HudRenderCallback.EVENT.register(hudRenderer::render);
+		CoreShaderRegistrationCallback.EVENT.register(RenderUtils::registerShaders);
+		ServerTickEvents.START_WORLD_TICK.register(itemManager::onServerTick);
+		ClientPlayConnectionEvents.JOIN.register(this::onClientJoin);
 		
-		ClientTickEvents.END_CLIENT_TICK.register((mc) -> {
-			if(keyOpenScreen.consumeClick()) {
-				mc.setScreen(new WindowManagerScreen(WaylandCraft.instance));
-			}
-		});
+	}
+	
+	/* Update bridge and clients. May be called at any state of the game, even outside of a level
+	 * Called before game render in Minecraft::runTick
+	 */
+	public void update() {
+		if(bridge == null) {
+			bridge = WaylandCraftBridge.start();
+			waylandSocket = bridge.getSocket();
+			
+			LOGGER.info("Server started on " + waylandSocket);
+		}
+		bridge.update();
+	}
+	
+	/* Called during level render. Used for everything relevant in-game. */
+	public void renderWorld(WorldRenderContext context) {
+		if(bridge == null) return;
 		
-		HudRenderCallback.EVENT.register((context, delta) -> {
-			if(Minecraft.getInstance().options.hideGui) return;
+		for(WLCPopup popup : bridge.getPopups()) {
+			WLCAbstractWindow root = popup;
+			while((root = ((WLCPopup) root).getParent()) instanceof WLCPopup);
 			
-			Font font = Minecraft.getInstance().font;
-			int yoff = 30;
-			int ystep = font.lineHeight + 2;
-			
-			if(WaylandCraft.instance.keyboardCapture != null) {
-				String text = "KEYBOARD CAPTURED [PRESS F7]";
-				context.drawString(font, text, context.guiWidth() - font.width(text) - 10, yoff, Color.red.getRGB(), true);
-				yoff += ystep;
+			WLCToplevel toplevel = (WLCToplevel) root;
+			boolean toplevelHasWindow = hasDisplayFor(toplevel);
+			boolean popupHasWindow = hasDisplayFor(popup);
+			if(toplevelHasWindow && !popupHasWindow) {
+				getOrCreateDisplay(popup);
 			}
-			
-			for(WLCToplevel toplevel : WaylandCraft.instance.bridge.getToplevels()) {
-				String appID = toplevel.appID;
-				
-				String name = "<unknown app>";
-				if(appID != null) {
-					name = appID;
-					
-					String xdgName = xdgManager.getName(appID);
-					if(xdgName != null) name = xdgName;
-				}
-				
-				Style style = Style.EMPTY;
-				Color color = Color.white;
-				
-				if(!hasDisplayFor(toplevel)) {
-					color = Color.lightGray;
-				}
-				if(toplevel == bridge.getMostRecentFocus()) {
-					style = style.applyFormat(ChatFormatting.UNDERLINE);
-				}
-				
-				int x = context.guiWidth() - font.width(name) - 10;
-				context.drawString(font, Component.literal(name).withStyle(style), x, yoff, color.getRGB(), true);
-				
-				if(appID != null) {
-					ResourceLocation icon = xdgManager.getIcon(appID);
-					int iconX = x - font.lineHeight - 2;
-					int iconY = yoff;
-					int iconW = font.lineHeight;
-					int iconH = font.lineHeight;
-					GL33.glEnable(GL33.GL_BLEND);
-					if(icon != null) RenderUtils.blitGUI(context, icon, iconX, iconY, iconX + iconW, iconY + iconH);
-					GL33.glDisable(GL33.GL_BLEND);
-				}
-				
-				yoff += ystep;
+			else if(!toplevelHasWindow && popupHasWindow) {
+				displays.removeIf((w) -> w.window == popup);
 			}
-			
-			if(pinnedToplevel != null && !pinnedToplevel.isAlive()) pinnedToplevel = null;
-			if(pinnedToplevel != null) {
-				WindowFramebuffer buf = pinnedToplevel.framebuffer;
-				SurfaceGeometry geometry = pinnedToplevel.geometry;
-				
-				int guiScale = (int) Minecraft.getInstance().getWindow().getGuiScale();
-				float x = -buf.getXOff() - geometry.x();
-				float y = -buf.getYOff() - geometry.y();
-				float w = buf.getWidth();
-				float h = buf.getHeight();
-				
-				x /= guiScale * 2;
-				y /= guiScale * 2;
-				w /= guiScale * 2;
-				h /= guiScale * 2;
-				
-				GL33.glEnable(GL33.GL_BLEND);
-				RenderUtils.blitGUI(context, buf.getTexture(), x, y, w, h);
-				GL33.glDisable(GL33.GL_BLEND);
-			}
-		});
+		}
 		
-		CoreShaderRegistrationCallback.EVENT.register(context -> {
-			RenderUtils.registerShaders(context);
-		});
+		displays.removeIf((d) -> !d.isValid());
+		displays.forEach((d) -> d.updateGeometry());
 		
-		ServerTickEvents.START_WORLD_TICK.register(level -> {
-			if(bridge == null) return;
+		for(WLCPopup popup : bridge.getPopups()) {
+			anchorToParent(popup);
+		}
+		
+		updateDisplayRequests();
+		
+		itemManager.giveItemsIfMissing(bridge.getNewToplevels());
+		
+		if(grabbedDisplay != null && !grabbedDisplay.isValid()) grabbedDisplay = null;
+		if(grabbedDisplay != null) anchorToCamera(grabbedDisplay, context.camera());
+		
+		boolean inWMScreen = Minecraft.getInstance().screen instanceof WindowManagerScreen;
+		
+		// Make sure the toplevels are focused in their respective order and being refocused when a toplevel disappears
+		if(!inWMScreen) {
+			WLCToplevel focus = bridge.getMostToLeastRecentFocus()
+					.filter((t) -> hasDisplayFor(t))
+					.findFirst()
+					.orElse(null);
 			
-			level.players().forEach(player -> {
-				newToplevels.forEach(toplevel -> {
-					ItemStack item = WindowItem.createItem(toplevel);
-					player.addItem(item);
-				});
+			bridge.focusSurface(focus);
+			
+			if(keyboardCapture != focus) {
+				keyboardCapture = null;
+			}
+		}
+		
+		RenderSystem.enableDepthTest();
+		displays.forEach((w) -> w.render(context));
+		
+		sendMotionEvents();
+		updateOutputSize(inWMScreen);
+	}
+	
+	public void onClientTick(Minecraft minecraft) {
+		if(keyOpenScreen.consumeClick()) {
+			minecraft.setScreen(new WindowManagerScreen(WaylandCraft.instance));
+		}
+	}
+	
+	private void onClientJoin(ClientPacketListener listener, PacketSender sender, Minecraft minecraft) {
+		minecraft.player.sendSystemMessage(Component.literal("Wayland compositor running on " + waylandSocket));
+		itemManager.giveItemsIfMissing(bridge.getToplevels());
+	}
+	
+	private void updateDisplayRequests() {
+		// Hide all windows that were minimized and unset minimize requested state
+		displays.removeIf((w) -> w.window instanceof WLCToplevel && ((WLCToplevel) w.window).requests.minimize);
+		Stream.of(bridge.getToplevels()).forEach((t) -> t.requests.minimize = false);
+		
+		// Handle any maximize or unmaximize requests
+		for(WLCToplevel toplevel : bridge.getToplevels()) {
+			if(toplevel.requests.maximize && toplevel.requests.unmaximize) {
+				// Both requests shouldn't happen at the same time
+				toplevel.restoreGeometry = null;
+			}
+			else if(toplevel.requests.maximize) {
+				// Maximize toplevel and store its old geometry
+				toplevel.restoreGeometry = toplevel.geometry;
+				bridge.maximizeToplevel(toplevel);
+			}
+			else if(toplevel.requests.unmaximize) {
+				// Unmaximize toplevel and attempt to restore old geometry
+				SurfaceGeometry newGeometry = toplevel.restoreGeometry;
+				if(newGeometry == null) newGeometry = toplevel.geometry;
 				
-				Inventory inv = player.getInventory();
-				for(int i = 0; i < inv.getContainerSize(); i++) {
-					ItemStack item = inv.getItem(i);
-					
-					if(!item.is(WindowItem.WINDOW)) continue;
-					if(WindowItem.getToplevel(item) != null) continue;
-					
-					inv.setItem(i, ItemStack.EMPTY);
-				}
-			});
-			newToplevels.clear();
+				// resizeToplevel also unsets the maximize flag
+				bridge.resizeToplevel(toplevel, newGeometry.width(), newGeometry.height());
+				toplevel.restoreGeometry = null;
+			}
 			
-			StreamSupport.stream(level.getAllEntities().spliterator(), false)
-					.filter((e) -> e instanceof ItemEntity)
-					.map((e) -> (ItemEntity) e)
-					.filter((e) -> e.getItem().is(WindowItem.WINDOW))
-					.filter((e) -> WindowItem.getToplevel(e.getItem()) == null)
-					.filter((e) -> e.getAge() > 10)
-					.forEach((e) -> {
-						for(int i = 0; i < 10; i++) {
-							double dx = ((level.random.nextDouble() * 2) - 1) * 0.15;
-							double dy = level.random.nextDouble() * 0.2;
-							double dz = ((level.random.nextDouble() * 2) - 1) * 0.15;
-							Minecraft.getInstance().level.addParticle(ParticleTypes.FLAME, e.getX(), e.getY(), e.getZ(), dx, dy, dz);
-						}
-						e.discard();
-					});
-		});
+			toplevel.requests.maximize = toplevel.requests.unmaximize = false;
+		}
+		
+		// Handle any fullscreen or unfullscreen requests
+		for(WLCToplevel toplevel : bridge.getToplevels()) {
+			if(toplevel.requests.fullscreen && toplevel.requests.unfullscreen) {
+				// Both requests shouldn't happen at the same time
+				toplevel.restoreGeometry = null;
+			}
+			else if(toplevel.requests.fullscreen) {
+				// Fullscreen toplevel and store its old geometry
+				toplevel.restoreGeometry = toplevel.geometry;
+				bridge.fullscreenToplevel(toplevel);
+			}
+			else if(toplevel.requests.unfullscreen) {
+				// Unfullscreen toplevel and attempt to restore old geometry
+				SurfaceGeometry newGeometry = toplevel.restoreGeometry;
+				if(newGeometry == null) newGeometry = toplevel.geometry;
+				
+				// resizeToplevel also unsets the fullscreen flag
+				bridge.resizeToplevel(toplevel, newGeometry.width(), newGeometry.height());
+				toplevel.restoreGeometry = null;
+			}
+			
+			toplevel.requests.fullscreen = toplevel.requests.unfullscreen = false;
+		}
 	}
 	
 	private void updateOutputSize(boolean inWMScreen) {
@@ -475,11 +381,9 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 		 * For X11 and Wayland hosts, this is a huge hack but should mostly work for now
 		 */
 		if(action == GLFW.GLFW_PRESS) {
-//			LOGGER.info("PRESSED KEY: " + scancode);
 			bridge.pressKey(scancode);
 		}
 		else if(action == GLFW.GLFW_RELEASE) {
-//			LOGGER.info("RELEASED KEY: " + scancode);
 			bridge.releaseKey(scancode);
 		}
 		

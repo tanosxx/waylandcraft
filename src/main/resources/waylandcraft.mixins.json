@@ -10,7 +10,8 @@
 		"IMouseHandlerMixin",
 		"ItemRendererMixin",
 		"ItemInHandRendererMixin",
-		"IItemInHandRendererMixin"
+		"IItemInHandRendererMixin",
+		"MinecraftMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
