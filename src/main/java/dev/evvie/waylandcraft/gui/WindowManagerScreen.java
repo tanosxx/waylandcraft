@@ -145,6 +145,8 @@ public class WindowManagerScreen extends Screen {
 		addRenderableWidget(hideButton);
 		addRenderableWidget(pinButton);
 		addRenderableWidget(itemButton);
+		
+		wlc.bridge.activateKeyboard();
 	}
 	
 	private void onGrabPressed(Button button) {
@@ -485,6 +487,7 @@ public class WindowManagerScreen extends Screen {
 		for(int mouseButton : pressedMouseButtons) {
 			wlc.bridge.sendButton(mouseButton, 0);
 		}
+		wlc.bridge.deactivateKeyboard();
 	}
 	
 	private void prepareToplevel(WLCToplevel toplevel) {

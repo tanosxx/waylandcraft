@@ -367,6 +367,14 @@ public class WaylandCraftBridge {
 		}
 	}
 	
+	public void activateKeyboard() {
+		keyboardActivate(instance);
+	}
+	
+	public void deactivateKeyboard() {
+		keyboardDeactivate(instance);
+	}
+	
 	private void updateFocusOrder() {
 		focusOrder.removeIf((t) -> !toplevels.contains(t));
 		for(WLCToplevel toplevel : toplevels) {
@@ -528,6 +536,9 @@ public class WaylandCraftBridge {
 	
 	// Set keyboard focus to a wayland surface. The handle may be 0 to unfocus any surfaces
 	private static native void keyboardFocus(long instance, long surfaceHandle);
+	
+	private static native void keyboardActivate(long instance);
+	private static native void keyboardDeactivate(long instance);
 	
 	// Keyboard input. scancode is the raw keycode. action: 0 is released, 1 is pressed.
 	private static native void keyboardInput(long instance, int scancode, int action);

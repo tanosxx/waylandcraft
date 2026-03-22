@@ -1,4 +1,5 @@
 use crate::{WLCState, get_time};
+use std::collections::HashSet;
 use std::ffi::CString;
 use std::sync::{Arc, Mutex};
 use std::ops::DerefMut;
@@ -38,6 +39,8 @@ use xkbcommon::xkb::{self, Keymap};
 pub struct WLCSeatState {
     pub pointers: Vec<WlPointer>,
     pub keyboards: Vec<WlKeyboard>,
+    pub kb_active: bool,
+    pub pressed_keys: HashSet<u32>,
     pub keymap_file: SealedFile,
     pub xkb_context: xkb::Context,
     pub xkb_state: xkb::State,
@@ -123,6 +126,8 @@ impl WLCSeatState {
         WLCSeatState {
             pointers: vec![],
             keyboards: vec![],
+            kb_active: false,
+            pressed_keys: HashSet::new(),
             keymap_file,
             xkb_context,
             xkb_state,
@@ -259,6 +264,12 @@ impl WLCSeatState {
         };
         let code = xkb::Keycode::new(key);
         self.xkb_state.update_key(code, dir);
+
+        if pressed {
+            self.pressed_keys.insert(key);
+        } else {
+            self.pressed_keys.remove(&key);
+        }
     }
 
     pub fn keyboard_focus(&mut self, surface: WlSurface) {
@@ -290,12 +301,7 @@ impl WLCSeatState {
             }
 
             // Keyboard should enter surface
-
-            let pressed: Vec<u32> = vec![]; // TODO: Implement.
-            let pressed: Vec<u8> = pressed
-                .iter()
-                .flat_map(|&k| k.to_ne_bytes())
-                .collect();
+            let pressed = self.serialize_pressed_keys();
 
             keyboard.enter(new_serial(), &surface, pressed);
             data.focus = Some(surface.clone());
@@ -304,7 +310,58 @@ impl WLCSeatState {
         });
     }
 
+    fn serialize_pressed_keys(&self) -> Vec<u8> {
+        let mut pressed: Vec<u32> = vec![];
+        if self.kb_active {
+            pressed = self.pressed_keys.iter().copied().collect();
+        }
+
+        let pressed: Vec<u8> = pressed
+            .iter()
+            .flat_map(|&k| k.to_ne_bytes())
+            .collect();
+
+        pressed
+    }
+
+    fn keyboard_refocus(&mut self) {
+        self.for_all_keyboards(|keyboard, data| {
+            if let Some(focus) = &data.focus {
+                if !focus.is_alive() { return }
+
+                let pressed = self.serialize_pressed_keys();
+                keyboard.leave(new_serial(), focus);
+                keyboard.enter(new_serial(), focus, pressed);
+                self.send_modifiers(&keyboard);
+            }
+        });
+    }
+
+    pub fn activate_keyboard(&mut self) {
+        if self.kb_active { return }
+
+        self.kb_active = true;
+        self.keyboard_refocus();
+    }
+
+    pub fn deactivate_keyboard(&mut self) {
+        if !self.kb_active { return }
+
+        self.kb_active = false;
+        self.keyboard_refocus();
+    }
+
     fn send_modifiers(&self, keyboard: &WlKeyboard) {
+        if !self.kb_active {
+            keyboard.modifiers(
+                new_serial(),
+                0, // MODS_DEPRESSED
+                0, // MODS_LATCHED
+                0, // MODS_LOCKED
+                self.xkb_state.serialize_layout(xkb::STATE_LAYOUT_EFFECTIVE)
+            );
+            return;
+        }
         keyboard.modifiers(
             new_serial(),
             self.xkb_state.serialize_mods(xkb::STATE_MODS_DEPRESSED),
@@ -324,6 +381,7 @@ impl WLCSeatState {
     }
 
     pub fn keyboard_key(&self, key: u32, state: KeyState) {
+        if !self.kb_active { return }
         self.for_all_keyboards(|keyboard, data| {
             if data.focus.is_some() {
                 keyboard.key(new_serial(), get_time(), key - 8, state);

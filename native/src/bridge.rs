@@ -1032,6 +1032,28 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardFocus<'l>(
 
 #[unsafe(no_mangle)]
 pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardActivate<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    ptr: jlong
+) {
+    let instance = jptr_to_instance(ptr);
+    instance.state.seat.activate_keyboard();
+}
+
+#[unsafe(no_mangle)]
+pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardDeactivate<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    ptr: jlong
+) {
+    let instance = jptr_to_instance(ptr);
+    instance.state.seat.deactivate_keyboard();
+}
+
+#[unsafe(no_mangle)]
+pub extern "system"
 fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_keyboardInput<'l>(
     _env: JNIEnv<'l>,
     _class: JClass<'l>,
