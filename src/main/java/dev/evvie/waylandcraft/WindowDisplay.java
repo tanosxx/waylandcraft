@@ -183,6 +183,10 @@ public class WindowDisplay {
 		this.rotate(look.reverse(), up.reverse());
 	}
 	
+	public void anchorToCamera(Camera camera) {
+		anchorToPosView(camera.getPosition(), new Vec3(camera.getLookVector()), new Vec3(camera.getUpVector()));
+	}
+	
 	public void anchorToEntity(Entity entity) {
 		anchorToPosView(WaylandCraftUtils.getPosition(entity), WaylandCraftUtils.getLookVector(entity), WaylandCraftUtils.getUpVector(entity));
 	}

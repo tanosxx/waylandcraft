@@ -11,7 +11,8 @@
 		"ItemRendererMixin",
 		"ItemInHandRendererMixin",
 		"IItemInHandRendererMixin",
-		"MinecraftMixin"
+		"MinecraftMixin",
+		"LocalPlayerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

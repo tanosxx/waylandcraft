@@ -42,7 +42,9 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -81,6 +83,8 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 	public KeyboardCaptureMode keyboardCaptureMode = KeyboardCaptureMode.NONE;
 	
 	public PointerCapture pointerCapture = null;
+	
+	public boolean playerUsingWindowItem = false;
 	
 	@Override
 	public void onInitialize() {
@@ -162,6 +166,15 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 		
 		processPointerMotion(camera);
 		
+		if(Minecraft.getInstance().player == null || !Minecraft.getInstance().player.isUsingItem()) playerUsingWindowItem = false;
+		if(playerUsingWindowItem) {
+			ItemStack item = Minecraft.getInstance().player.getUseItem();
+			if(item.is(WindowItem.WINDOW)) {
+				getOrCreateDisplay(WindowItem.getToplevel(item)).anchorToCamera(camera);
+			}
+			else playerUsingWindowItem = false;
+		}
+		
 		displays.sort(((display1, display2) -> (int) Math.signum(display2.pivot.distanceToSqr(camera.getPosition()) - display1.pivot.distanceToSqr(camera.getPosition()))));
 		displays.forEach((w) -> w.render(camera));
 		
@@ -184,6 +197,8 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 	}
 	
 	public void onClientTick(Minecraft minecraft) {
+		if(minecraft.player == null) return;
+		
 		if(keyOpenScreen.consumeClick()) {
 			keyboardCaptureMode = KeyboardCaptureMode.NONE;
 			pointerGrabs.releaseAll();
@@ -369,6 +384,8 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 		
 		/* All of the following code will only be executed when there aren't any active pointer grabs */
 		
+		if(hoveredDisplay != null && !canStartInteracting()) hoveredDisplay = null;
+		
 		if(hoveredDisplay != null) {
 			this.overridePickBlock = true;
 		}
@@ -426,6 +443,13 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 		}
 		
 		return false;
+	}
+	
+	private boolean canStartInteracting() {
+		LocalPlayer player = Minecraft.getInstance().player;
+		if(player == null) return false;
+		if(player.isUsingItem()) return false;
+		return true;
 	}
 	
 	/* Handle mouse being turned in game

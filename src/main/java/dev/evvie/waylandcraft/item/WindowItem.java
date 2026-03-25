@@ -10,6 +10,7 @@ import dev.evvie.waylandcraft.WaylandCraft;
 import dev.evvie.waylandcraft.bridge.WLCToplevel;
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -17,6 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -83,8 +85,16 @@ public class WindowItem extends Item {
 		
 		if(toplevel == null) return InteractionResultHolder.pass(item);
 		
-		WaylandCraft.instance.getOrCreateDisplay(toplevel).anchorToEntity(player);
+		player.startUsingItem(interactionHand);
 		return InteractionResultHolder.sidedSuccess(item, level.isClientSide());
+	}
+	
+	@Override
+	public void onUseTick(Level level, LivingEntity livingEntity, ItemStack itemStack, int i) {
+		if(!level.isClientSide) return;
+		if(livingEntity != Minecraft.getInstance().player) return;
+		
+		WaylandCraft.instance.playerUsingWindowItem = true;
 	}
 	
 	public static ItemStack createItem(WLCToplevel toplevel) {
