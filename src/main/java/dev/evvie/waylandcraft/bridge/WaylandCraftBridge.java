@@ -29,6 +29,7 @@ public class WaylandCraftBridge {
 	private ArrayList<WLCToplevel> newToplevels = new ArrayList<WLCToplevel>();
 	
 	private @Nullable Integer lastMoveRequestSerial = null;
+	private @Nullable ResizeRequest lastResizeRequest = null;
 	
 	static {
 		System.loadLibrary("waylandcraft");
@@ -201,6 +202,11 @@ public class WaylandCraftBridge {
 		int[] moveRequest = moveRequest(instance);
 		if(moveRequest != null) {
 			lastMoveRequestSerial = moveRequest[0];
+		}
+		
+		int[] resizeRequest = resizeRequest(instance);
+		if(resizeRequest != null) {
+			lastResizeRequest = new ResizeRequest(resizeRequest[0], resizeRequest[1]);
 		}
 		
 		// Reset surface visited state
@@ -444,6 +450,13 @@ public class WaylandCraftBridge {
 		return serial;
 	}
 	
+	public ResizeRequest checkResizeRequest() {
+		if(lastResizeRequest == null) return null;
+		ResizeRequest req = lastResizeRequest;
+		lastResizeRequest = null;
+		return req;
+	}
+	
 	public void resizeOutput(int width, int height) {
 		outputResize(instance, width, height);
 	}
@@ -470,8 +483,9 @@ public class WaylandCraftBridge {
 		return resolveIconPath(instance, appID);
 	}
 	
-	public static record Size(int width, int height) {
-	}
+	public static record Size(int width, int height) {}
+	
+	public static record ResizeRequest(int serial, int edges) {}
 	
 	private static native long init(long glfwGetProcAddress, long eglDisplay);
 	private static native void update(long instance);
@@ -502,6 +516,8 @@ public class WaylandCraftBridge {
 	
 	// Collect up to one serial of a sent interactive move request
 	private static native int[] moveRequest(long instance);
+	// Collect up to one serial of a sent interactive resize request
+	private static native int[] resizeRequest(long instance);
 	
 	// All toplevels that are currently in fullscreen
 	private static native long[] fullscreened(long instance);

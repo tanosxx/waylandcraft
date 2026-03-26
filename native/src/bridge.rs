@@ -383,6 +383,33 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_moveRequest<'l>(
     array.into_raw()
 }
 
+#[unsafe(no_mangle)]
+pub extern "system"
+fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_resizeRequest<'l>(
+    env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    ptr: jlong
+) -> jarray {
+    let instance = jptr_to_instance(ptr);
+    let req = instance
+        .state
+        .requests
+        .resize_interactive
+        .pop();
+
+    let (serial, edges) = match req {
+        Some(r) => r,
+        None => { return std::ptr::null_mut() }
+    };
+
+    let serial = Into::<u32>::into(serial) as jint;
+    let edges = Into::<u32>::into(edges) as jint;
+
+    let array = env.new_int_array(2).unwrap();
+    env.set_int_array_region(&array, 0, &[ serial, edges ]).unwrap();
+    array.into_raw()
+}
+
 #[allow(non_upper_case_globals)]
 const WLCSurface_class: &str = "dev/evvie/waylandcraft/bridge/WLCSurface";
 

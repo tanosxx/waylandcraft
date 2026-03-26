@@ -18,10 +18,12 @@ import dev.evvie.waylandcraft.bridge.WLCPopup;
 import dev.evvie.waylandcraft.bridge.WLCSurface;
 import dev.evvie.waylandcraft.bridge.WLCToplevel;
 import dev.evvie.waylandcraft.bridge.WaylandCraftBridge;
+import dev.evvie.waylandcraft.bridge.WaylandCraftBridge.ResizeRequest;
 import dev.evvie.waylandcraft.bridge.WaylandCraftBridge.Size;
 import dev.evvie.waylandcraft.grabs.MoveGrab;
 import dev.evvie.waylandcraft.grabs.PointerGrabMap;
 import dev.evvie.waylandcraft.grabs.PointerGrabMap.ImplicitGrab;
+import dev.evvie.waylandcraft.grabs.ResizeGrab;
 import dev.evvie.waylandcraft.gui.WaylandHudRenderer;
 import dev.evvie.waylandcraft.gui.WindowManagerScreen;
 import dev.evvie.waylandcraft.item.WindowItem;
@@ -278,6 +280,15 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 			if(implicit != null) {
 				// The serial matched an active implicit grab
 				pointerGrabs.startExclusive(new MoveGrab(implicit));
+			}
+		}
+		
+		ResizeRequest resizeRequest = bridge.checkResizeRequest();
+		if(resizeRequest != null) {
+			ImplicitGrab implicit = pointerGrabs.dropImplicitMatching(resizeRequest.serial());
+			if(implicit != null) {
+				// The serial matched an active implicit grab
+				pointerGrabs.startExclusive(new ResizeGrab(implicit, resizeRequest.edges()));
 			}
 		}
 	}

@@ -25,6 +25,7 @@ use smithay::{
             },
             Display, DisplayHandle,
         },
+        wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge,
     },
     wayland::{
         socket::ListeningSocketSource,
@@ -96,6 +97,7 @@ pub struct WindowRequests {
     pub fullscreen: Vec<ToplevelSurface>,
     pub unfullscreen: Vec<ToplevelSurface>,
     pub move_interactive: Vec<Serial>,
+    pub resize_interactive: Vec<(Serial, ResizeEdge)>,
 }
 
 impl WLCState {
@@ -264,6 +266,16 @@ impl XdgShellHandler for WLCState {
         serial: Serial
     ) {
         self.requests.move_interactive.push(serial);
+    }
+
+    fn resize_request(
+        &mut self,
+        _surface: ToplevelSurface,
+        _seat: WlSeat,
+        serial: Serial,
+        edges: ResizeEdge
+    ) {
+        self.requests.resize_interactive.push((serial, edges));
     }
 }
 

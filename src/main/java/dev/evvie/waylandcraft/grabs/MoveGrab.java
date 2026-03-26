@@ -10,7 +10,7 @@ import net.minecraft.world.phys.Vec3;
 public class MoveGrab extends PointerGrab {
 	
 	private final WindowDisplay window;
-	private Vec3 initialSurfaceLocal = null;
+	private final Vec3 initialSurfaceLocal;
 	
 	public MoveGrab(ImplicitGrab implicit) {
 		super(implicit.button());
@@ -28,6 +28,8 @@ public class MoveGrab extends PointerGrab {
 	
 	@Override
 	public void moveWorld(Vec3 pos, Vec3 view, Vec3 up) throws GrabDroppedException {
+		if(!window.isValid()) this.drop();
+		
 		DisplayHitResult hitResult = window.intersect(pos, view);
 		if(hitResult == null) return;
 		
