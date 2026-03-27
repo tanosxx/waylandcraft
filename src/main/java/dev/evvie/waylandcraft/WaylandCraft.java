@@ -1,5 +1,6 @@
 package dev.evvie.waylandcraft;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.stream.Stream;
@@ -33,6 +34,8 @@ import dev.evvie.waylandcraft.item.WindowItemManager;
 import dev.evvie.waylandcraft.render.RenderUtils;
 import dev.evvie.waylandcraft.render.WindowInHandRenderer;
 import dev.evvie.waylandcraft.render.WindowInItemFrameRenderer;
+import dev.evvie.waylandcraft.settings.WaylandCraftSettings;
+import dev.evvie.waylandcraft.settings.WaylandCraftSettingsManager;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -72,6 +75,8 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 	
 	public WindowItemManager itemManager = new WindowItemManager(this);
 	public XDGDesktopManager xdgManager;
+	public WaylandCraftSettingsManager settingsManager;
+	public WaylandCraftSettings settings;
 	
 	public KeyMapping keyOpenScreen;
 	public KeyMapping keyOpenAppLauncher;
@@ -105,6 +110,13 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 		LOGGER.info("Initializing WaylandCraft");
 		
 		instance = this;
+		
+		try {
+			settingsManager = new WaylandCraftSettingsManager(this);
+		} catch(IOException e) {
+			e.printStackTrace();
+			throw new RuntimeException("Failed to create settings storage!");
+		}
 		
 		keyOpenScreen = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.windowManager", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, KEYBIND_CATEGORY));
 		keyOpenAppLauncher = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.appLauncher", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_V, KEYBIND_CATEGORY));

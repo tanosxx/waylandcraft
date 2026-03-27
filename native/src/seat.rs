@@ -83,6 +83,17 @@ pub struct WLCKeyboardData {
 
 type WLCKeyboard = Arc<Mutex<WLCKeyboardData>>;
 
+// Keyboard RMLVO keymap specifier
+// Empty options interpreted as default, not as literally empty
+#[derive(Default)]
+pub struct RMLVO {
+    pub rules: String,
+    pub model: String,
+    pub layout: String,
+    pub variant: String,
+    pub options: String,
+}
+
 fn with_pointer_data<F, R>(pointer: &WlPointer, f: F) -> R
     where F: FnOnce(&mut WLCPointerData) -> R
 {
@@ -105,6 +116,14 @@ fn with_keyboard_data<F>(keyboard: &WlKeyboard, f: F)
         .unwrap();
     let data = guard.deref_mut();
     f(data);
+}
+
+fn create_keymap_file(keymap: &Keymap) -> SealedFile {
+    let keymap_str = keymap.get_as_string(xkb::KEYMAP_FORMAT_TEXT_V1);
+    SealedFile::with_content(
+        c"waylandcraft-keymap",
+        &CString::new(keymap_str.as_str()).unwrap()
+    ).expect("SealedFile create")
 }
 
 fn new_serial() -> u32 {
@@ -130,15 +149,10 @@ impl WLCSeatState {
             "", // variant
             None, // options
             xkb::KEYMAP_COMPILE_NO_FLAGS, // flags
-        ).expect("keymap create");
-
-        let keymap_str = keymap.get_as_string(xkb::KEYMAP_FORMAT_TEXT_V1);
-        let keymap_file = SealedFile::with_content(
-            c"waylandcraft-keymap",
-            &CString::new(keymap_str.as_str()).unwrap()
-        ).expect("SealedFile create");
+        ).expect("default keymap create");
 
         let xkb_state = xkb::State::new(&keymap);
+        let keymap_file = create_keymap_file(&keymap);
 
         WLCSeatState {
             pointers: vec![],
@@ -471,6 +485,63 @@ impl WLCSeatState {
         for keyboard in &self.keyboards {
             with_keyboard_data(keyboard, |data| f(keyboard, data));
         }
+    }
+
+    fn change_keymap(&mut self, keymap: &Keymap) {
+        let xkb_state = xkb::State::new(keymap);
+        let keymap_file = create_keymap_file(keymap);
+
+        self.xkb_state = xkb_state;
+        self.keymap_file = keymap_file;
+        self.keyboard_refocus();
+    }
+
+    pub fn change_keymap_to_default(&mut self) {
+        let keymap = Keymap::new_from_names(
+            &self.xkb_context,
+            "", // rules
+            "", // model
+            "", // layout
+            "", // variant
+            None, // options
+            xkb::KEYMAP_COMPILE_NO_FLAGS, // flags
+        ).expect("default keymap create");
+        self.change_keymap(&keymap);
+    }
+
+    pub fn change_keymap_by_desc(&mut self, desc: &RMLVO)
+        -> Result<String, ()>
+    {
+        let keymap = Keymap::new_from_names(
+            &self.xkb_context,
+            &desc.rules,
+            &desc.model,
+            &desc.layout,
+            &desc.variant,
+            Some(desc.options.clone()),
+            xkb::KEYMAP_COMPILE_NO_FLAGS, // flags
+        );
+        let keymap = match keymap {
+            Some(k) => k,
+            None => { return Err(()) },
+        };
+        self.change_keymap(&keymap);
+        Ok(keymap.get_as_string(xkb::KEYMAP_FORMAT_TEXT_V1))
+    }
+
+    pub fn change_keymap_by_str(&mut self, desc: String) -> bool {
+        let keymap = Keymap::new_from_string(
+            &self.xkb_context,
+            desc,
+            xkb::KEYMAP_FORMAT_TEXT_V1,
+            xkb::KEYMAP_COMPILE_NO_FLAGS,
+        );
+        let keymap = match keymap {
+            Some(k) => k,
+            None => { return false },
+        };
+        self.change_keymap(&keymap);
+        true
     }
 }
 
