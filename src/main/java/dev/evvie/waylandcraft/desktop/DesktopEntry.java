@@ -7,22 +7,24 @@ import net.minecraft.resources.ResourceLocation;
 
 public class DesktopEntry {
 	
-	public final @NotNull String appId;
-	public final @Nullable String name;
-	public final @Nullable String genericName;
-	public final @Nullable String exec;
-	public final boolean execTerminal;
-	public final boolean visible;
-	public final @Nullable ResourceLocation icon;
+	public @NotNull String appId;
+	public @Nullable String name;
+	public @Nullable String genericName;
+	public @Nullable String exec;
+	public boolean execTerminal;
+	public boolean visible;
+	public @Nullable ResourceLocation icon;
+	protected String iconPath;
 	
-	public DesktopEntry(String appId, String name, String genericName, String exec, boolean execTerminal, boolean visible, ResourceLocation icon) {
+	public DesktopEntry(String appId, String name, String genericName, String exec, boolean execTerminal, boolean visible, String iconPath) {
 		this.appId = appId;
 		this.name = name;
 		this.genericName = genericName;
 		this.exec = exec;
 		this.execTerminal = execTerminal;
 		this.visible = visible;
-		this.icon = icon;
+		this.icon = null;
+		this.iconPath = iconPath;
 	}
 	
 	@Override

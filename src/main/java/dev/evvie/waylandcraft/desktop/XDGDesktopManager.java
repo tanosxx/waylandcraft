@@ -3,6 +3,8 @@ package dev.evvie.waylandcraft.desktop;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,58 +24,97 @@ import net.minecraft.server.packs.resources.ResourceManager;
 public class XDGDesktopManager {
 	
 	private final WaylandCraft wlc;
-	private ArrayList<DesktopEntry> systemEntries;
-	private ArrayList<DesktopEntry> localEntries = new ArrayList<DesktopEntry>();
+	private ArrayList<DesktopEntry> systemEntries = null;
+	private Thread systemEntryFetchThread;
+	private boolean iconsUploaded = false;
 	
 	public XDGDesktopManager(WaylandCraft wlc) {
 		this.wlc = wlc;
-		
-		this.loadSystemEntries();
-	}
-	
-	public List<DesktopEntry> entries() {
-		ArrayList<DesktopEntry> entries = new ArrayList<DesktopEntry>();
-		entries.addAll(systemEntries);
-		entries.addAll(localEntries);
-		return entries;
+		systemEntryFetchThread = new Thread(this::loadSystemEntries);
+		systemEntryFetchThread.start();
 	}
 	
 	private void loadSystemEntries() {
-		systemEntries = new ArrayList<DesktopEntry>();
-		for(RawDesktopEntry raw : wlc.bridge.loadSystemDesktopEntries()) {
-			systemEntries.add(load(raw));
+		/* Calling this in a separate thread is probably a huge crime but I'm desperate */
+		
+		Instant start = Instant.now();
+		
+		RawDesktopEntry[] rawEntries = wlc.bridge.loadSystemDesktopEntries();
+		ArrayList<DesktopEntry> systemEntries = new ArrayList<DesktopEntry>();
+		for(RawDesktopEntry raw : rawEntries) {
+			systemEntries.add(new DesktopEntry(raw.appId, raw.name, raw.genericName, raw.exec, raw.execTerminal, raw.visible, raw.iconPath));
 		}
+		this.systemEntries = systemEntries;
+		
+		WaylandCraft.LOGGER.info("Completed desktop entry loading in " + Duration.between(start, Instant.now()).toMillis() / 1000.0f + "s");
 	}
 	
-	private DesktopEntry load(RawDesktopEntry raw) {
-		IconTexture icon = tryLoadIcon(raw.iconPath);
-		ResourceLocation iconLocation = null;
-		
-		if(icon != null) {
-			TextureManager textureManager = Minecraft.getInstance().getTextureManager();
-			iconLocation = new ResourceLocation(WaylandCraft.MOD_ID, "icon_" + DigestUtils.sha1Hex(raw.appId));
-			textureManager.register(iconLocation, icon);
+	private boolean completeFetch() {
+		boolean done = false;
+		try {
+			done = systemEntryFetchThread.join(Duration.ZERO);
+		} catch(InterruptedException e) {
 		}
 		
-		return new DesktopEntry(raw.appId, raw.name, raw.genericName, raw.exec, raw.execTerminal, raw.visible, iconLocation);
+		if(done) {
+			if(!iconsUploaded) {
+				uploadIcons();
+				iconsUploaded =  true;
+			}
+			return true;
+		}
+		
+		return false;
+	}
+	
+	public List<DesktopEntry> entries() {
+		if(!completeFetch()) {
+			return new ArrayList<DesktopEntry>();
+		}
+		
+		ArrayList<DesktopEntry> entries = new ArrayList<DesktopEntry>();
+		entries.addAll(systemEntries);
+		return entries;
 	}
 	
 	public @Nullable DesktopEntry forAppId(String appId) {
-		for(DesktopEntry entry : localEntries) {
-			if(entry.appId.equals(appId)) return entry;
+		if(!completeFetch()) {
+			return null;
 		}
+		
 		for(DesktopEntry entry : systemEntries) {
 			if(entry.appId.equals(appId)) return entry;
 		}
 		return null;
 	}
 	
+	private void uploadIcons() {
+		Instant start = Instant.now();
+		
+		TextureManager textureManager = Minecraft.getInstance().getTextureManager();
+		
+		for(DesktopEntry entry : systemEntries) {
+			IconTexture texture = tryLoadIcon(entry.iconPath);
+			if(texture != null) {
+				ResourceLocation location = new ResourceLocation(WaylandCraft.MOD_ID, "icon_" + DigestUtils.sha1Hex(entry.appId));
+				textureManager.register(location, texture);
+				entry.icon = location;
+			}
+		}
+		
+		WaylandCraft.LOGGER.info("Completed icon uploading in " + Duration.between(start, Instant.now()).toMillis() / 1000.0f + "s");
+	}
+	
 	public @Nullable String getName(String appId) {
-		return forAppId(appId).name;
+		DesktopEntry entry = forAppId(appId);
+		if(entry == null) return null;
+		return entry.name;
 	}
 	
 	public @Nullable ResourceLocation getIcon(String appId) {
-		return forAppId(appId).icon;
+		DesktopEntry entry = forAppId(appId);
+		if(entry == null) return null;
+		return entry.icon;
 	}
 	
 	private String getExtension(File file) {
@@ -103,7 +144,6 @@ public class XDGDesktopManager {
 		 * signals what type of file we should expect.
 		 */
 		if(!getExtension(iconFile).equals("png")) {
-			System.err.println("Icon is not PNG!");
 			return null;
 		}
 		

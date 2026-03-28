@@ -57,7 +57,7 @@ impl XDGSpecHelper {
         Some(self.to_raw(&entry))
     }
 
-    pub fn load_entries(&self) -> Vec<RawDesktopEntry> {
+    pub fn get_raw_entries(&self) -> Vec<RawDesktopEntry> {
         self.entries.iter().map(|e| self.to_raw(&e)).collect()
     }
 

@@ -1618,7 +1618,7 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_loadDesktopEntries<'l>(
     ptr: jlong,
 ) -> jarray {
     let instance = jptr_to_instance(ptr);
-    let entries = instance.xdg.load_entries();
+    let entries = instance.xdg.get_raw_entries();
     let entries: Vec<JObject<'l>> = entries
         .iter()
         .map(|e| raw_desktop_entry_to_java(&mut env, e))
