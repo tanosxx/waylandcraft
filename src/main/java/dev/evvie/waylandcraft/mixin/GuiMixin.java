@@ -1,9 +1,11 @@
 package dev.evvie.waylandcraft.mixin;
 
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
+import dev.evvie.waylandcraft.CursorShape;
 import dev.evvie.waylandcraft.WaylandCraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
@@ -19,27 +21,35 @@ public class GuiMixin {
 	
 	@Redirect(method = "renderCrosshair", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphics;blitSprite(Lnet/minecraft/resources/ResourceLocation;IIII)V", ordinal = 0))
 	public void crosshairBlitSprite(GuiGraphics context, ResourceLocation original, int x, int y, int width, int height) {
-		ResourceLocation crosshair = original;
-		
-		switch(WaylandCraft.instance.cursorShape) {
-		case 0: return; // hide cursor
-		case 18: crosshair = LEFT_RIGHT_CROSSHAIR; break; // e_resize
-		case 19: crosshair = TOP_BOTTOM_CROSSHAIR; break; // n_resize
-		case 20: crosshair = TRBL_DIAGONAL_CROSSHAIR; break; // ne_resize
-		case 21: crosshair = TLBR_DIAGONAL_CROSSHAIR; break; // nw_resize
-		case 22: crosshair = TOP_BOTTOM_CROSSHAIR; break; // s_resize
-		case 23: crosshair = TLBR_DIAGONAL_CROSSHAIR; break; // se_resize
-		case 24: crosshair = TRBL_DIAGONAL_CROSSHAIR; break; // sw_resize
-		case 25: crosshair = LEFT_RIGHT_CROSSHAIR; break; // w_resize
-		case 26: crosshair = LEFT_RIGHT_CROSSHAIR; break; // ew_resize
-		case 27: crosshair = TOP_BOTTOM_CROSSHAIR; break; // ns_resize
-		case 28: crosshair = TRBL_DIAGONAL_CROSSHAIR; break; // nesw_resize
-		case 29: crosshair = TLBR_DIAGONAL_CROSSHAIR; break; // nwse_resize
-		case 30: crosshair = LEFT_RIGHT_CROSSHAIR; break; // col_resize
-		case 31: crosshair = TOP_BOTTOM_CROSSHAIR; break; // row_resize
-		}
+		CursorShape cursor = WaylandCraft.instance.cursorShape;
+		ResourceLocation crosshair = crosshairForCursor(cursor);
+		if(crosshair == null) crosshair = original;
 		
 		context.blitSprite(crosshair, x, y, width, height);
+	}
+	
+	private @Nullable ResourceLocation crosshairForCursor(@Nullable CursorShape cursor) {
+		if(cursor == null) return null;
+		
+		switch(cursor) {
+		case DEFAULT: return null;
+		case HIDE: return null;
+		case E_RESIZE: return LEFT_RIGHT_CROSSHAIR;
+		case N_RESIZE: return TOP_BOTTOM_CROSSHAIR;
+		case NE_RESIZE: return TRBL_DIAGONAL_CROSSHAIR;
+		case NW_RESIZE: return TLBR_DIAGONAL_CROSSHAIR;
+		case S_RESIZE: return TOP_BOTTOM_CROSSHAIR;
+		case SE_RESIZE: return TLBR_DIAGONAL_CROSSHAIR;
+		case SW_RESIZE: return TRBL_DIAGONAL_CROSSHAIR;
+		case W_RESIZE: return LEFT_RIGHT_CROSSHAIR;
+		case EW_RESIZE: return LEFT_RIGHT_CROSSHAIR;
+		case NS_RESIZE: return TOP_BOTTOM_CROSSHAIR;
+		case NESW_RESIZE: return TRBL_DIAGONAL_CROSSHAIR;
+		case NWSE_RESIZE: return TLBR_DIAGONAL_CROSSHAIR;
+		case COL_RESIZE: return LEFT_RIGHT_CROSSHAIR;
+		case ROW_RESIZE: return TOP_BOTTOM_CROSSHAIR;
+		default: return null;
+		}
 	}
 	
 }

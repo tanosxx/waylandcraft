@@ -12,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWNativeEGL;
 
+import dev.evvie.waylandcraft.CursorShape;
 import dev.evvie.waylandcraft.bridge.WLCAbstractWindow.SurfaceGeometry;
 import dev.evvie.waylandcraft.desktop.RawDesktopEntry;
 import dev.evvie.waylandcraft.render.BufferTexture.DmabufTexture;
@@ -382,8 +383,8 @@ public class WaylandCraftBridge {
 		pointerAxis(instance, axis, value);
 	}
 	
-	public int getCursorShape() {
-		return cursorShape(instance);
+	public CursorShape getCursorShape() {
+		return CursorShape.fromId(cursorShape(instance));
 	}
 	
 	public void focusSurface(@Nullable WLCToplevel toplevel) {

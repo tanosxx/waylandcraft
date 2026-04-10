@@ -95,7 +95,7 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 	
 	public boolean playerUsingWindowItem = false;
 	
-	public int cursorShape = -1;
+	public @Nullable CursorShape cursorShape = null;
 	
 	@Override
 	public void onInitialize() {
@@ -348,7 +348,7 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 	}
 	
 	private void processPointerMotion(Camera camera) {
-		this.cursorShape = -1;
+		this.cursorShape = null;
 		
 		if(pointerCapture != null) {
 			if(!pointerCapture.surface.isAlive()) {
