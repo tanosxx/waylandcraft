@@ -4,9 +4,10 @@ use crate::seat::WLCSeatState;
 use crate::ddm::WLCDataState;
 use crate::xdg_spec::XDGSpecHelper;
 use crate::output::WLCOutput;
+use crate::utils::get_time;
 use std::sync::Arc;
 use std::ops::DerefMut;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::Duration;
 use std::ffi::OsString;
 use smithay::{
     reexports::{
@@ -66,6 +67,7 @@ mod xdg_spec;
 mod output;
 mod svg;
 mod process;
+mod utils;
 
 pub(crate) struct WaylandCraft<'a> {
     pub state: WLCState,
@@ -299,14 +301,6 @@ impl ClientData for WLCClient {
 
     fn disconnected(&self, _id: ClientId, _reason: DisconnectReason) {
     }
-}
-
-pub fn get_time() -> u32 {
-    let time: u128 = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    time as u32
 }
 
 pub(crate) fn wlc_init(

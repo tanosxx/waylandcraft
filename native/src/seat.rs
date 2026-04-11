@@ -1,11 +1,12 @@
-use crate::{WLCState, get_time};
+use crate::WLCState;
+use crate::utils::{get_time, new_serial, to_fixed2};
 use std::collections::HashSet;
 use std::ffi::CString;
 use std::sync::{Arc, Mutex};
 use std::ops::DerefMut;
 use std::os::fd::AsFd;
 use smithay::{
-    utils::{SERIAL_COUNTER, SealedFile},
+    utils::SealedFile,
     reexports::{
         wayland_server::{
             backend::{ClientId},
@@ -147,18 +148,6 @@ fn create_keymap_file(keymap: &Keymap) -> SealedFile {
         c"waylandcraft-keymap",
         &CString::new(keymap_str.as_str()).unwrap()
     ).expect("SealedFile create")
-}
-
-fn new_serial() -> u32 {
-    SERIAL_COUNTER.next_serial().into()
-}
-
-fn to_fixed(v: f64) -> i32 {
-    (v * 256.0) as i32
-}
-
-fn to_fixed2(v1: f64, v2: f64) -> (i32, i32) {
-    (to_fixed(v1), to_fixed(v2))
 }
 
 impl WLCSeatState {
