@@ -26,8 +26,16 @@ pub struct WLCDataState {
     display_handle: DisplayHandle,
 }
 
+#[derive(Debug, PartialEq)]
+enum SourceUsage {
+    Unused,
+    Selection,
+    Drag,
+}
+
 type WLCDataSource = Arc<Mutex<WLCDataSourceData>>;
 struct WLCDataSourceData {
+    usage: SourceUsage,
     mime: Vec<String>,
 }
 
@@ -168,6 +176,7 @@ impl Dispatch<WlDDM, ()> for WLCState {
         match request {
             wl_ddm::Request::CreateDataSource { id } => {
                 let source_data = WLCDataSourceData {
+                    usage: SourceUsage::Unused,
                     mime: vec![],
                 };
                 let source_data = Arc::new(Mutex::new(source_data));
@@ -224,14 +233,27 @@ impl Dispatch<WlDataDevice, WLCDataDevice> for WLCState {
     fn request(
         state: &mut Self,
         client: &Client,
-        _device: &WlDataDevice,
+        device: &WlDataDevice,
         request: wl_data_device::Request,
         _data: &WLCDataDevice,
         _disp: &DisplayHandle,
         _data_init: &mut DataInit<'_, Self>,
     ) {
         match request {
-            wl_data_device::Request::StartDrag { .. } => {},
+            wl_data_device::Request::StartDrag { source, .. } => {
+                if let Some(source) = &source {
+                    with_source_data(source, |data| {
+                        if data.usage != SourceUsage::Unused {
+                            device.post_error(
+                                wl_data_device::Error::UsedSource,
+                                "reused data source",
+                            );
+                            return;
+                        }
+                        data.usage = SourceUsage::Drag;
+                    });
+                }
+            },
             wl_data_device::Request::SetSelection { source, serial: _ } => {
                 let focus = state.data.clipboard_focus.as_ref();
                 if !focus.is_some_and(|c| c == client) {
@@ -249,6 +271,17 @@ impl Dispatch<WlDataDevice, WLCDataDevice> for WLCState {
                     if mime.iter().any(|m| m == "SAVE_TARGETS") {
                         return;
                     }
+
+                    with_source_data(source, |data| {
+                        if data.usage != SourceUsage::Unused {
+                            device.post_error(
+                                wl_data_device::Error::UsedSource,
+                                "reused data source",
+                            );
+                            return;
+                        }
+                        data.usage = SourceUsage::Selection;
+                    });
                 }
 
                 if let Some(old_clipboard) = &state.data.clipboard {
