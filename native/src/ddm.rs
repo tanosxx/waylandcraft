@@ -38,6 +38,7 @@ pub struct WLCDndEvent {
     pub icon: Option<WlSurface>,
     pub focus: Option<WlSurface>,
     pub mime: Option<String>,
+    pub action: DndAction,
     pub dropped: bool,
 }
 
@@ -272,12 +273,12 @@ impl WLCDataState {
         if dnd.dropped { return }
         dnd.dropped = true;
 
-        if dnd.focus.is_none() || dnd.mime.is_none() {
+        let action = dnd.action;
+        if dnd.focus.is_none() || dnd.mime.is_none() || action.is_empty() {
             self.dnd_cancel();
             return;
         }
 
-        let action = wl_ddm::DndAction::Copy;
         dnd.source.action(action);
         dnd.source.dnd_drop_performed();
 
@@ -347,7 +348,7 @@ impl Dispatch<WlDDM, ()> for WLCState {
                 let source_data = WLCDataSourceData {
                     usage: SourceUsage::Unused,
                     mime: vec![],
-                    actions: DndAction::empty(),
+                    actions: DndAction::None,
                 };
                 let source_data = Arc::new(Mutex::new(source_data));
                 let _source = data_init.init(id, source_data.clone());
@@ -478,6 +479,7 @@ impl Dispatch<WlDataDevice, WLCDataDevice> for WLCState {
                     icon: icon.clone(),
                     focus: None,
                     mime: None,
+                    action: DndAction::None,
                     dropped: false,
                 });
             },
@@ -585,7 +587,51 @@ impl Dispatch<WlDataOffer, WLCDataOffer> for WLCState {
                     data.source.dnd_finished();
                 });
             },
-            wl_data_offer::Request::SetActions { .. } => {},
+            wl_data_offer::Request::SetActions {
+                dnd_actions,
+                preferred_action
+            } => {
+                let dnd_actions = match dnd_actions.into_result() {
+                    Ok(a) => a,
+                    Err(_) => { return }
+                };
+                let preferred_action = match preferred_action.into_result() {
+                    Ok(a) => a,
+                    Err(_) => { return }
+                };
+
+                let source_actions = with_offer_data(offer, |data| {
+                    with_source_data(&data.source, |sdata| {
+                        sdata.actions
+                    })
+                });
+
+                let actions = dnd_actions & source_actions;
+                let action = if actions.contains(preferred_action) &&
+                    preferred_action != DndAction::Ask
+                {
+                    preferred_action
+                } else {
+                    actions
+                        .iter()
+                        .filter(|a| *a != DndAction::Ask)
+                        .next()
+                        .unwrap_or(DndAction::None)
+                };
+
+                assert!(action.iter().count() <= 1);
+                assert_eq!(action.iter().find(|a| *a == DndAction::Ask), None);
+                assert!(actions.contains(action));
+
+                let dnd = match state.data.dnd.as_mut() {
+                    Some(d) => d,
+                    None => { return }
+                };
+                dnd.action = action;
+
+                offer.action(dnd.action);
+                dnd.source.action(dnd.action);
+            },
             _ => unreachable!(),
         }
     }
