@@ -316,8 +316,14 @@ public class WaylandCraft implements ModInitializer, ClientModInitializer {
 		if(dndRequest != null) {
 			ImplicitGrab implicit = pointerGrabs.dropImplicitMatching(dndRequest);
 			if(implicit != null) {
+				LOGGER.info("DND STARTED");
 				// The serial matched an active implicit grab
 				pointerGrabs.startExclusive(new DNDGrab(implicit));
+			}
+			else {
+				// Couldn't match implicit grab, have to cancel dnd
+				LOGGER.info("drag and drop did not match implicit grab");
+				bridge.dndCancel();
 			}
 		}
 	}

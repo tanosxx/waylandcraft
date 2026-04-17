@@ -34,6 +34,7 @@ pub struct WLCDataState {
 // `dropped` is set when the user successfully performed a drop over a surface
 pub struct WLCDndEvent {
     pub start_serial: u32,
+    pub request_sent: bool,
     pub source: WlDataSource,
     pub icon: Option<WlSurface>,
     pub focus: Option<WlSurface>,
@@ -176,7 +177,15 @@ impl WLCDataState {
         println!("\tsource: {:?}", dnd.source);
         println!("\tfocus: {:?}", dnd.focus);
         println!("\tmime: {:?}", dnd.mime);
+        println!("\taction: {:?}", dnd.action);
         println!("\tdropped: {:?}", dnd.dropped);
+    }
+
+    pub fn check_dnd_request(&mut self) -> Option<u32> {
+        let dnd = self.dnd.as_mut()?;
+        if dnd.request_sent { return None; }
+        dnd.request_sent = true;
+        Some(dnd.start_serial)
     }
 
     pub fn dnd_motion(&mut self, surface: Option<WlSurface>, x: f64, y: f64) {
@@ -475,6 +484,7 @@ impl Dispatch<WlDataDevice, WLCDataDevice> for WLCState {
 
                 state.data.dnd = Some(WLCDndEvent {
                     start_serial: serial,
+                    request_sent: false,
                     source: source.clone(),
                     icon: icon.clone(),
                     focus: None,

@@ -1776,12 +1776,12 @@ fn Java_dev_evvie_waylandcraft_bridge_WaylandCraftBridge_checkDndRequest<'l>(
     ptr: jlong,
 ) -> jarray {
     let instance = jptr_to_instance(ptr);
-    let dnd = match &instance.state.data.dnd {
-        Some(d) => d,
+    let request = match instance.state.data.check_dnd_request() {
+        Some(r) => r,
         None => { return std::ptr::null_mut() }
     };
 
-    let serial = Into::<u32>::into(dnd.start_serial) as jint;
+    let serial = request as jint;
     let array = env.new_int_array(1).unwrap();
     env.set_int_array_region(&array, 0, &[ serial ]).unwrap();
     array.into_raw()
