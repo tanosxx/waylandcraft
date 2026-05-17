@@ -1,4 +1,5 @@
-# waylandcraft
+![waylandcraft banner](/assets/title_scaled.png)
+
 Wayland Compositor in Minecraft
 
 ## Implemented protocols
