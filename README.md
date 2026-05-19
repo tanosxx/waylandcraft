@@ -4,6 +4,8 @@ Wayland Compositor in Minecraft
 
 [Demo video](https://youtu.be/cTkEM7b0IQw)
 
+Now available on [Modrinth](https://modrinth.com/mod/waylandcraft)!
+
 ## System dependencies
 - OS: Linux
 - Minecraft 26.1.2
